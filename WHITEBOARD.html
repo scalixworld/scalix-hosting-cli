@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scalix CLI - Architecture Whiteboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0e17; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; overflow: hidden; color: #e0e6ed; }
+
+  #header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: linear-gradient(135deg, #0d1321 0%, #1a1f35 100%);
+    border-bottom: 1px solid #2a3a5c;
+    padding: 10px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.4);
+  }
+  #header h1 { font-size: 18px; font-weight: 600; color: #60a5fa; letter-spacing: 0.5px; }
+  #header .subtitle { font-size: 12px; color: #64748b; margin-left: 12px; }
+  #controls { display: flex; gap: 8px; align-items: center; }
+  #controls button {
+    background: #1e293b; border: 1px solid #334155; color: #94a3b8;
+    padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    transition: all 0.15s;
+  }
+  #controls button:hover { background: #334155; color: #e2e8f0; border-color: #475569; }
+  #controls .zoom-info { font-size: 11px; color: #64748b; min-width: 45px; text-align: center; }
+
+  #canvas-container {
+    position: absolute; top: 50px; left: 0; right: 0; bottom: 0;
+    overflow: hidden; cursor: grab;
+  }
+  #canvas-container.dragging { cursor: grabbing; }
+  #canvas-container.node-dragging { cursor: grabbing; }
+
+  #canvas {
+    position: absolute;
+    transform-origin: 0 0;
+    width: 4000px; height: 3000px;
+  }
+
+  svg.connections {
+    position: absolute; top: 0; left: 0;
+    width: 4000px; height: 3000px;
+    pointer-events: none;
+  }
+  svg.connections path {
+    fill: none; stroke-width: 2; opacity: 0.6;
+  }
+  svg.connections .flow-arrow { stroke: #3b82f6; stroke-width: 2.5; opacity: 0.7; }
+  svg.connections .data-arrow { stroke: #10b981; stroke-width: 2; stroke-dasharray: 6 3; opacity: 0.6; }
+  svg.connections .auth-arrow { stroke: #f59e0b; stroke-width: 2; stroke-dasharray: 4 4; opacity: 0.6; }
+
+  .node {
+    position: absolute;
+    border-radius: 10px;
+    padding: 0;
+    cursor: move;
+    user-select: none;
+    transition: box-shadow 0.2s;
+    min-width: 180px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  }
+  .node:hover { box-shadow: 0 6px 28px rgba(0,0,0,0.5); z-index: 50; }
+  .node.dragging { z-index: 1000; box-shadow: 0 12px 40px rgba(0,0,0,0.6); }
+
+  .node-header {
+    padding: 10px 14px;
+    border-radius: 10px 10px 0 0;
+    font-weight: 600;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.3px;
+  }
+  .node-body {
+    padding: 10px 14px;
+    font-size: 11px;
+    line-height: 1.6;
+    border-radius: 0 0 10px 10px;
+    background: rgba(0,0,0,0.2);
+  }
+  .node-body .detail { color: #94a3b8; margin: 2px 0; }
+  .node-body .highlight { color: #60a5fa; font-weight: 500; }
+  .node-body code {
+    background: rgba(255,255,255,0.08);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 10px;
+  }
+
+  /* Node type styles */
+  .node-entry { border: 2px solid #7c3aed; }
+  .node-entry .node-header { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: #fff; }
+
+  .node-command { border: 2px solid #3b82f6; }
+  .node-command .node-header { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; }
+
+  .node-util { border: 2px solid #10b981; }
+  .node-util .node-header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; }
+
+  .node-api { border: 2px solid #f59e0b; }
+  .node-api .node-header { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; }
+
+  .node-storage { border: 2px solid #ec4899; }
+  .node-storage .node-header { background: linear-gradient(135deg, #ec4899 0%, #db2777 100%); color: #fff; }
+
+  .node-external { border: 2px solid #8b5cf6; }
+  .node-external .node-header { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; }
+
+  .node-test { border: 2px solid #06b6d4; }
+  .node-test .node-header { background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); color: #fff; }
+
+  .node-build { border: 2px solid #64748b; }
+  .node-build .node-header { background: linear-gradient(135deg, #64748b 0%, #475569 100%); color: #fff; }
+
+  /* Legend */
+  #legend {
+    position: fixed; bottom: 16px; left: 16px; z-index: 100;
+    background: rgba(13, 19, 33, 0.95);
+    border: 1px solid #2a3a5c;
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 11px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  #legend h3 { font-size: 12px; color: #94a3b8; margin-bottom: 8px; font-weight: 600; }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+  .legend-line { width: 24px; height: 2px; flex-shrink: 0; border-radius: 1px; }
+  .legend-line.dashed { background: repeating-linear-gradient(90deg, currentColor 0, currentColor 5px, transparent 5px, transparent 8px); height: 2px; }
+
+  /* Minimap */
+  #minimap {
+    position: fixed; bottom: 16px; right: 16px; z-index: 100;
+    width: 200px; height: 150px;
+    background: rgba(13, 19, 33, 0.95);
+    border: 1px solid #2a3a5c;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  #minimap-viewport {
+    position: absolute;
+    border: 1.5px solid #3b82f6;
+    background: rgba(59, 130, 246, 0.08);
+    border-radius: 2px;
+  }
+  .minimap-node {
+    position: absolute;
+    border-radius: 2px;
+    opacity: 0.7;
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div style="display:flex;align-items:center;">
+    <h1>Scalix CLI - Architecture Whiteboard</h1>
+    <span class="subtitle">@scalix/cli v1.0.0 | Node.js CLI Tool</span>
+  </div>
+  <div id="controls">
+    <button onclick="resetView()">Reset View</button>
+    <button onclick="zoomIn()">+</button>
+    <span class="zoom-info" id="zoom-label">100%</span>
+    <button onclick="zoomOut()">-</button>
+    <button onclick="fitAll()">Fit All</button>
+  </div>
+</div>
+
+<div id="canvas-container">
+  <div id="canvas">
+    <svg class="connections" id="connections"></svg>
+  </div>
+</div>
+
+<div id="legend">
+  <h3>Legend</h3>
+  <div class="legend-item"><div class="legend-dot" style="background:#7c3aed;"></div> Entry Point</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3b82f6;"></div> CLI Command</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#10b981;"></div> Utility Module</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> API / Endpoint</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ec4899;"></div> Storage</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6;"></div> External Service</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#06b6d4;"></div> Tests</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#64748b;"></div> Build/Config</div>
+  <div style="margin-top:8px;border-top:1px solid #2a3a5c;padding-top:8px;">
+    <div class="legend-item"><div class="legend-line" style="background:#3b82f6;"></div> Command Flow</div>
+    <div class="legend-item"><div class="legend-line dashed" style="color:#10b981;"></div> Data Flow</div>
+    <div class="legend-item"><div class="legend-line dashed" style="color:#f59e0b;"></div> Auth Flow</div>
+  </div>
+</div>
+
+<div id="minimap"></div>
+
+<script>
+// --- Node Definitions ---
+const nodes = [
+  // Entry Point
+  { id: 'entry', type: 'entry', x: 340, y: 80, title: 'CLI Entry Point', icon: '>', body: [
+    { t: 'highlight', v: 'src/index.ts' },
+    { t: 'detail', v: 'Commander.js program' },
+    { t: 'detail', v: 'Binary: <code>scalix</code>' },
+    { t: 'detail', v: 'Parses process.argv' },
+    { t: 'detail', v: 'Registers 10 commands' },
+  ]},
+
+  // User Input
+  { id: 'user', type: 'external', x: 340, y: -60, title: 'User Terminal', icon: '$', body: [
+    { t: 'detail', v: '<code>scalix &lt;command&gt; [opts]</code>' },
+    { t: 'detail', v: 'Node.js >= 18.0.0' },
+  ]},
+
+  // Auth Commands
+  { id: 'login', type: 'command', x: 30, y: 280, title: 'scalix login', icon: 'L', body: [
+    { t: 'highlight', v: 'commands/login.ts' },
+    { t: 'detail', v: '<code>--token &lt;token&gt;</code>' },
+    { t: 'detail', v: 'OAuth2 browser flow' },
+    { t: 'detail', v: 'Polls callback endpoint' },
+    { t: 'detail', v: 'Manual token fallback' },
+  ]},
+  { id: 'logout', type: 'command', x: 30, y: 490, title: 'scalix logout', icon: 'X', body: [
+    { t: 'highlight', v: 'commands/logout.ts' },
+    { t: 'detail', v: 'Clears stored token' },
+    { t: 'detail', v: 'No arguments' },
+  ]},
+
+  // Deployment Commands
+  { id: 'deploy', type: 'command', x: 300, y: 280, title: 'scalix deploy', icon: 'D', body: [
+    { t: 'highlight', v: 'commands/deploy.ts' },
+    { t: 'detail', v: '<code>-d --dir</code> <code>-n --name</code>' },
+    { t: 'detail', v: '<code>--database</code> <code>--env</code>' },
+    { t: 'detail', v: 'ZIP + base64 upload' },
+    { t: 'detail', v: '100MB size limit' },
+    { t: 'detail', v: 'Polls deploy status' },
+  ]},
+  { id: 'update', type: 'command', x: 300, y: 520, title: 'scalix update', icon: 'U', body: [
+    { t: 'highlight', v: 'commands/update.ts' },
+    { t: 'detail', v: '<code>&lt;deployment-id&gt;</code>' },
+    { t: 'detail', v: '<code>-d --dir</code> <code>--env</code>' },
+    { t: 'detail', v: 'PUT to update deployment' },
+  ]},
+  { id: 'delete', type: 'command', x: 300, y: 720, title: 'scalix delete', icon: '-', body: [
+    { t: 'highlight', v: 'commands/delete.ts' },
+    { t: 'detail', v: '<code>&lt;deployment-id&gt;</code>' },
+    { t: 'detail', v: '<code>-f --force</code> alias: <code>rm</code>' },
+    { t: 'detail', v: 'Confirmation prompt' },
+  ]},
+  { id: 'rollback', type: 'command', x: 300, y: 910, title: 'scalix rollback', icon: 'R', body: [
+    { t: 'highlight', v: 'commands/rollback.ts' },
+    { t: 'detail', v: '<code>&lt;deployment-id&gt;</code>' },
+    { t: 'detail', v: '<code>-v --version</code> <code>-f --force</code>' },
+    { t: 'detail', v: 'Version history picker' },
+  ]},
+
+  // Monitoring Commands
+  { id: 'list', type: 'command', x: 580, y: 280, title: 'scalix list', icon: '#', body: [
+    { t: 'highlight', v: 'commands/list.ts' },
+    { t: 'detail', v: '<code>--status</code> filter' },
+    { t: 'detail', v: 'alias: <code>ls</code>' },
+    { t: 'detail', v: 'Color-coded statuses' },
+  ]},
+  { id: 'logs', type: 'command', x: 580, y: 480, title: 'scalix logs', icon: '~', body: [
+    { t: 'highlight', v: 'commands/logs.ts' },
+    { t: 'detail', v: '<code>&lt;deployment-id&gt;</code>' },
+    { t: 'detail', v: '<code>-f --follow</code> <code>--tail</code>' },
+    { t: 'detail', v: 'Follow: polls every 2s' },
+    { t: 'detail', v: 'SIGINT handler' },
+  ]},
+  { id: 'status', type: 'command', x: 580, y: 670, title: 'scalix status', icon: '?', body: [
+    { t: 'highlight', v: 'commands/status.ts' },
+    { t: 'detail', v: '<code>&lt;deployment-id&gt;</code>' },
+    { t: 'detail', v: 'Shows URL, DB, timestamps' },
+  ]},
+  { id: 'config', type: 'command', x: 580, y: 850, title: 'scalix config', icon: '*', body: [
+    { t: 'highlight', v: 'commands/config.ts' },
+    { t: 'detail', v: '<code>--list</code> <code>--get</code> <code>--set</code>' },
+    { t: 'detail', v: 'Key: API_URL' },
+    { t: 'detail', v: 'Session-only persistence' },
+  ]},
+
+  // Utilities
+  { id: 'api-client', type: 'util', x: 900, y: 120, title: 'API Client', icon: 'A', body: [
+    { t: 'highlight', v: 'utils/api.ts' },
+    { t: 'detail', v: 'Axios instance' },
+    { t: 'detail', v: 'Auto Bearer token injection' },
+    { t: 'detail', v: 'Retry: 3x for 5xx/network' },
+    { t: 'detail', v: '5-min timeout' },
+    { t: 'detail', v: 'UA: <code>scalix-cli/{ver}</code>' },
+  ]},
+  { id: 'token-util', type: 'util', x: 900, y: 370, title: 'Token Manager', icon: 'T', body: [
+    { t: 'highlight', v: 'utils/token.ts' },
+    { t: 'detail', v: 'getToken() / saveToken()' },
+    { t: 'detail', v: 'clearToken()' },
+    { t: 'detail', v: 'File: <code>~/.scalix/token</code>' },
+  ]},
+  { id: 'env-util', type: 'util', x: 900, y: 560, title: 'Env Loader', icon: 'E', body: [
+    { t: 'highlight', v: 'utils/env.ts' },
+    { t: 'detail', v: 'loadEnvFile()' },
+    { t: 'detail', v: 'Parses .env format' },
+    { t: 'detail', v: 'Quotes, comments, multiline' },
+  ]},
+  { id: 'validation', type: 'util', x: 900, y: 730, title: 'Validation', icon: 'V', body: [
+    { t: 'highlight', v: 'utils/validation.ts' },
+    { t: 'detail', v: 'validateDeploymentId()' },
+    { t: 'detail', v: 'validateAppName()' },
+    { t: 'detail', v: 'validateEnvVarName/Value()' },
+    { t: 'detail', v: 'sanitize helpers' },
+  ]},
+  { id: 'constants', type: 'util', x: 900, y: 910, title: 'Constants', icon: 'C', body: [
+    { t: 'highlight', v: 'utils/constants.ts' },
+    { t: 'detail', v: 'API_URL, timeouts, limits' },
+    { t: 'detail', v: 'Polling intervals' },
+    { t: 'detail', v: 'Regex patterns' },
+  ]},
+
+  // External API
+  { id: 'scalix-api', type: 'api', x: 1220, y: 120, title: 'Scalix Cloud API', icon: '@', body: [
+    { t: 'highlight', v: 'https://app.scalix.com' },
+    { t: 'detail', v: '/api/hosting/* endpoints' },
+    { t: 'detail', v: '/api/cli/auth/* endpoints' },
+    { t: 'detail', v: '/api/scalixdb/* endpoints' },
+  ]},
+
+  // Storage
+  { id: 'token-file', type: 'storage', x: 1220, y: 370, title: 'Token Storage', icon: 'F', body: [
+    { t: 'detail', v: '<code>~/.scalix/token</code>' },
+    { t: 'detail', v: 'Plaintext file' },
+    { t: 'detail', v: 'Created on login' },
+    { t: 'detail', v: 'Deleted on logout' },
+  ]},
+
+  // External Services
+  { id: 'browser', type: 'external', x: 30, y: 80, title: 'System Browser', icon: 'B', body: [
+    { t: 'detail', v: 'Opened via <code>open</code> pkg' },
+    { t: 'detail', v: 'OAuth2 authentication' },
+  ]},
+
+  // Build
+  { id: 'build', type: 'build', x: 1220, y: 560, title: 'Build Pipeline', icon: '!', body: [
+    { t: 'highlight', v: 'tsc (TypeScript)' },
+    { t: 'detail', v: 'ES2020 -> CommonJS' },
+    { t: 'detail', v: 'src/ -> dist/' },
+    { t: 'detail', v: 'Declarations + sourcemaps' },
+    { t: 'detail', v: 'Pre-publish: build+test+lint' },
+  ]},
+
+  // Tests
+  { id: 'tests', type: 'test', x: 1220, y: 760, title: 'Test Suite', icon: 'T', body: [
+    { t: 'highlight', v: 'Vitest 2.x + V8 coverage' },
+    { t: 'detail', v: '6 command test files' },
+    { t: 'detail', v: '3 utility test files' },
+    { t: 'detail', v: '~91 test cases total' },
+    { t: 'detail', v: 'Full mock isolation' },
+  ]},
+];
+
+// --- Connection Definitions ---
+const connections = [
+  // User -> Entry
+  { from: 'user', to: 'entry', type: 'flow-arrow', label: '' },
+
+  // Entry -> Commands
+  { from: 'entry', to: 'login', type: 'flow-arrow' },
+  { from: 'entry', to: 'logout', type: 'flow-arrow' },
+  { from: 'entry', to: 'deploy', type: 'flow-arrow' },
+  { from: 'entry', to: 'update', type: 'flow-arrow' },
+  { from: 'entry', to: 'delete', type: 'flow-arrow' },
+  { from: 'entry', to: 'rollback', type: 'flow-arrow' },
+  { from: 'entry', to: 'list', type: 'flow-arrow' },
+  { from: 'entry', to: 'logs', type: 'flow-arrow' },
+  { from: 'entry', to: 'status', type: 'flow-arrow' },
+  { from: 'entry', to: 'config', type: 'flow-arrow' },
+
+  // Commands -> API Client
+  { from: 'login', to: 'api-client', type: 'data-arrow' },
+  { from: 'deploy', to: 'api-client', type: 'data-arrow' },
+  { from: 'update', to: 'api-client', type: 'data-arrow' },
+  { from: 'delete', to: 'api-client', type: 'data-arrow' },
+  { from: 'rollback', to: 'api-client', type: 'data-arrow' },
+  { from: 'list', to: 'api-client', type: 'data-arrow' },
+  { from: 'logs', to: 'api-client', type: 'data-arrow' },
+  { from: 'status', to: 'api-client', type: 'data-arrow' },
+
+  // API Client -> Scalix API
+  { from: 'api-client', to: 'scalix-api', type: 'flow-arrow' },
+
+  // Token flows
+  { from: 'login', to: 'token-util', type: 'auth-arrow' },
+  { from: 'logout', to: 'token-util', type: 'auth-arrow' },
+  { from: 'api-client', to: 'token-util', type: 'auth-arrow' },
+  { from: 'config', to: 'token-util', type: 'auth-arrow' },
+  { from: 'token-util', to: 'token-file', type: 'data-arrow' },
+
+  // Deploy -> utilities
+  { from: 'deploy', to: 'env-util', type: 'data-arrow' },
+  { from: 'deploy', to: 'validation', type: 'data-arrow' },
+  { from: 'update', to: 'env-util', type: 'data-arrow' },
+  { from: 'update', to: 'validation', type: 'data-arrow' },
+
+  // Other commands -> validation
+  { from: 'logs', to: 'validation', type: 'data-arrow' },
+  { from: 'status', to: 'validation', type: 'data-arrow' },
+  { from: 'delete', to: 'validation', type: 'data-arrow' },
+  { from: 'rollback', to: 'validation', type: 'data-arrow' },
+
+  // Login -> Browser
+  { from: 'login', to: 'browser', type: 'flow-arrow' },
+
+  // Constants -> everything
+  { from: 'constants', to: 'api-client', type: 'data-arrow' },
+  { from: 'constants', to: 'validation', type: 'data-arrow' },
+
+  // Build & Tests
+  { from: 'build', to: 'entry', type: 'data-arrow' },
+  { from: 'tests', to: 'entry', type: 'data-arrow' },
+];
+
+// --- Rendering ---
+const canvas = document.getElementById('canvas');
+const container = document.getElementById('canvas-container');
+const svgEl = document.getElementById('connections');
+let scale = 0.85;
+let panX = 100, panY = 80;
+let isPanning = false;
+let panStartX, panStartY;
+let dragNode = null, dragOffX, dragOffY;
+const nodeElements = {};
+
+function renderNodes() {
+  nodes.forEach(n => {
+    const el = document.createElement('div');
+    el.className = `node node-${n.type}`;
+    el.id = `node-${n.id}`;
+    el.style.left = n.x + 'px';
+    el.style.top = n.y + 'px';
+
+    let bodyHtml = '';
+    if (n.body) {
+      bodyHtml = '<div class="node-body">' +
+        n.body.map(b => `<div class="${b.t}">${b.v}</div>`).join('') +
+        '</div>';
+    }
+
+    el.innerHTML = `
+      <div class="node-header">
+        <span style="font-family:monospace;font-size:14px;opacity:0.7;">[${n.icon}]</span>
+        ${n.title}
+      </div>
+      ${bodyHtml}
+    `;
+
+    el.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      dragNode = n;
+      dragOffX = e.clientX / scale - n.x;
+      dragOffY = e.clientY / scale - n.y;
+      el.classList.add('dragging');
+      container.classList.add('node-dragging');
+    });
+
+    canvas.appendChild(el);
+    nodeElements[n.id] = el;
+  });
+}
+
+function getNodeCenter(id) {
+  const n = nodes.find(n => n.id === id);
+  const el = nodeElements[id];
+  if (!n || !el) return { x: 0, y: 0 };
+  return {
+    x: n.x + el.offsetWidth / 2,
+    y: n.y + el.offsetHeight / 2
+  };
+}
+
+function getNodeEdge(fromId, toId) {
+  const from = nodes.find(n => n.id === fromId);
+  const to = nodes.find(n => n.id === toId);
+  const fromEl = nodeElements[fromId];
+  const toEl = nodeElements[toId];
+  if (!from || !to || !fromEl || !toEl) return { x1: 0, y1: 0, x2: 0, y2: 0 };
+
+  const fx = from.x + fromEl.offsetWidth / 2;
+  const fy = from.y + fromEl.offsetHeight / 2;
+  const tx = to.x + toEl.offsetWidth / 2;
+  const ty = to.y + toEl.offsetHeight / 2;
+
+  // Calculate exit/entry points on node edges
+  const fw = fromEl.offsetWidth / 2;
+  const fh = fromEl.offsetHeight / 2;
+  const tw = toEl.offsetWidth / 2;
+  const th = toEl.offsetHeight / 2;
+
+  const dx = tx - fx;
+  const dy = ty - fy;
+  const angle = Math.atan2(dy, dx);
+
+  // From edge
+  let x1, y1;
+  if (Math.abs(Math.cos(angle)) * fh > Math.abs(Math.sin(angle)) * fw) {
+    x1 = fx + Math.sign(Math.cos(angle)) * fw;
+    y1 = fy + Math.tan(angle) * Math.sign(Math.cos(angle)) * fw;
+  } else {
+    x1 = fx + (1 / Math.tan(angle)) * Math.sign(Math.sin(angle)) * fh;
+    y1 = fy + Math.sign(Math.sin(angle)) * fh;
+  }
+
+  // To edge
+  const angle2 = angle + Math.PI;
+  let x2, y2;
+  if (Math.abs(Math.cos(angle2)) * th > Math.abs(Math.sin(angle2)) * tw) {
+    x2 = tx + Math.sign(Math.cos(angle2)) * tw;
+    y2 = ty + Math.tan(angle2) * Math.sign(Math.cos(angle2)) * tw;
+  } else {
+    x2 = tx + (1 / Math.tan(angle2)) * Math.sign(Math.sin(angle2)) * th;
+    y2 = ty + Math.sign(Math.sin(angle2)) * th;
+  }
+
+  return { x1, y1, x2, y2 };
+}
+
+function renderConnections() {
+  let svg = '';
+  // Arrow marker definitions
+  svg += `<defs>
+    <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#3b82f6" opacity="0.7"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#10b981" opacity="0.6"/>
+    </marker>
+    <marker id="arrowYellow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#f59e0b" opacity="0.6"/>
+    </marker>
+  </defs>`;
+
+  connections.forEach(c => {
+    const edge = getNodeEdge(c.from, c.to);
+    const { x1, y1, x2, y2 } = edge;
+
+    // Cubic bezier control points
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const cx1 = x1 + dx * 0.4;
+    const cy1 = y1;
+    const cx2 = x2 - dx * 0.4;
+    const cy2 = y2;
+
+    let marker = '';
+    if (c.type === 'flow-arrow') marker = 'url(#arrowBlue)';
+    else if (c.type === 'data-arrow') marker = 'url(#arrowGreen)';
+    else if (c.type === 'auth-arrow') marker = 'url(#arrowYellow)';
+
+    svg += `<path class="${c.type}" d="M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}" marker-end="${marker}"/>`;
+  });
+
+  svgEl.innerHTML = svg;
+}
+
+function updateTransform() {
+  canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+  document.getElementById('zoom-label').textContent = Math.round(scale * 100) + '%';
+  updateMinimap();
+}
+
+function zoomIn() { scale = Math.min(2, scale * 1.15); updateTransform(); }
+function zoomOut() { scale = Math.max(0.2, scale / 1.15); updateTransform(); }
+function resetView() { scale = 0.85; panX = 100; panY = 80; updateTransform(); }
+function fitAll() {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  nodes.forEach(n => {
+    const el = nodeElements[n.id];
+    if (!el) return;
+    minX = Math.min(minX, n.x);
+    minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x + el.offsetWidth);
+    maxY = Math.max(maxY, n.y + el.offsetHeight);
+  });
+  const w = maxX - minX + 100;
+  const h = maxY - minY + 100;
+  const cw = container.clientWidth;
+  const ch = container.clientHeight;
+  scale = Math.min(cw / w, ch / h, 1.2);
+  panX = (cw - w * scale) / 2 - minX * scale + 50;
+  panY = (ch - h * scale) / 2 - minY * scale + 50;
+  updateTransform();
+}
+
+// --- Minimap ---
+function updateMinimap() {
+  const mm = document.getElementById('minimap');
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  nodes.forEach(n => {
+    const el = nodeElements[n.id];
+    if (!el) return;
+    minX = Math.min(minX, n.x);
+    minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x + el.offsetWidth);
+    maxY = Math.max(maxY, n.y + el.offsetHeight);
+  });
+  const pad = 40;
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  const w = maxX - minX;
+  const h = maxY - minY;
+  const mmW = mm.clientWidth;
+  const mmH = mm.clientHeight;
+  const s = Math.min(mmW / w, mmH / h);
+
+  let html = '';
+  const colors = {
+    entry: '#7c3aed', command: '#3b82f6', util: '#10b981', api: '#f59e0b',
+    storage: '#ec4899', external: '#8b5cf6', test: '#06b6d4', build: '#64748b'
+  };
+  nodes.forEach(n => {
+    const el = nodeElements[n.id];
+    if (!el) return;
+    const nx = (n.x - minX) * s;
+    const ny = (n.y - minY) * s;
+    const nw = el.offsetWidth * s;
+    const nh = el.offsetHeight * s;
+    html += `<div class="minimap-node" style="left:${nx}px;top:${ny}px;width:${Math.max(4, nw)}px;height:${Math.max(3, nh)}px;background:${colors[n.type] || '#555'};"></div>`;
+  });
+
+  // Viewport indicator
+  const vx = (-panX / scale - minX) * s;
+  const vy = (-panY / scale - minY) * s;
+  const vw = (container.clientWidth / scale) * s;
+  const vh = (container.clientHeight / scale) * s;
+  html += `<div id="minimap-viewport" style="left:${vx}px;top:${vy}px;width:${vw}px;height:${vh}px;"></div>`;
+
+  mm.innerHTML = html;
+}
+
+// --- Pan & Zoom Events ---
+container.addEventListener('mousedown', (e) => {
+  if (dragNode) return;
+  isPanning = true;
+  panStartX = e.clientX - panX;
+  panStartY = e.clientY - panY;
+  container.classList.add('dragging');
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (dragNode) {
+    const newX = e.clientX / scale - dragOffX - panX / scale;
+    const newY = e.clientY / scale - dragOffY - panY / scale;
+    dragNode.x = newX;
+    dragNode.y = newY;
+    const el = nodeElements[dragNode.id];
+    el.style.left = newX + 'px';
+    el.style.top = newY + 'px';
+    renderConnections();
+    updateMinimap();
+    return;
+  }
+  if (!isPanning) return;
+  panX = e.clientX - panStartX;
+  panY = e.clientY - panStartY;
+  updateTransform();
+});
+
+window.addEventListener('mouseup', () => {
+  if (dragNode) {
+    const el = nodeElements[dragNode.id];
+    el.classList.remove('dragging');
+    container.classList.remove('node-dragging');
+    dragNode = null;
+  }
+  isPanning = false;
+  container.classList.remove('dragging');
+});
+
+container.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect = container.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  const oldScale = scale;
+  if (e.deltaY < 0) scale = Math.min(2, scale * 1.08);
+  else scale = Math.max(0.2, scale / 1.08);
+
+  panX = mx - (mx - panX) * (scale / oldScale);
+  panY = my - (my - panY) * (scale / oldScale);
+  updateTransform();
+}, { passive: false });
+
+// --- Keyboard shortcuts ---
+window.addEventListener('keydown', (e) => {
+  if (e.key === '0') resetView();
+  if (e.key === '=') zoomIn();
+  if (e.key === '-') zoomOut();
+  if (e.key === 'f') fitAll();
+});
+
+// --- Init ---
+renderNodes();
+requestAnimationFrame(() => {
+  renderConnections();
+  updateTransform();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+{
+  "name": "@scalix/cli",
+  "version": "1.0.0",
+  "description": "Scalix Hosting CLI - Deploy and manage applications from the command line",
+  "main": "dist/index.js",
+  "bin": {
+    "scalix-hosting": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "prepublish": "npm run build && npm run test",
+    "prepublishOnly": "npm run build && npm run test && npm run lint"
+  },
+  "keywords": [
+    "scalix",
+    "hosting",
+    "deployment",
+    "cli",
+    "serverless"
+  ],
+  "author": "Scalix",
+  "license": "MIT",
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "axios": "^1.13.2",
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
+    "form-data": "^4.0.0",
+    "inquirer": "^9.2.12",
+    "keytar": "^7.9.0",
+    "open": "^10.0.0",
+    "ora": "^7.0.1"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.0",
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^24.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "eslint": "^8.57.1",
+    "prettier": "^3.5.3",
+    "tsx": "^4.7.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
