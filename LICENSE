@@ -1,0 +1,100 @@
+SCALIX WORLD PRIVATE LIMITED
+END USER LICENSE AGREEMENT (EULA)
+
+Copyright (c) 2025-2026 Scalix World Pvt Ltd. All rights reserved.
+A subsidiary of Energy FW Ltd (UK Company No. 14600160)
+
+IMPORTANT — READ CAREFULLY BEFORE USING THIS SOFTWARE.
+
+This End User License Agreement ("Agreement") is a legal agreement between you
+("User") and Scalix World Private Limited ("Company", "we", "us"), a company
+incorporated under the laws of India (CIN: U72100KL2026PTC102006), for the use
+of the software, source code, documentation, and associated materials
+(collectively, the "Software") contained in this repository.
+
+By accessing, downloading, copying, installing, or otherwise using the Software,
+you agree to be bound by the terms of this Agreement. If you do not agree to
+these terms, do not use the Software.
+
+
+1. LICENSE GRANT
+
+   Subject to the terms of this Agreement, the Company grants you a limited,
+   non-exclusive, non-transferable, revocable license to use the Software solely
+   for the purposes expressly authorized by the Company.
+
+   You may NOT:
+   a) Copy, modify, adapt, translate, or create derivative works of the Software;
+   b) Distribute, sublicense, lease, rent, loan, or otherwise transfer the
+      Software or any rights therein to any third party;
+   c) Reverse engineer, decompile, disassemble, or attempt to derive the source
+      code of the Software, except to the extent permitted by applicable law;
+   d) Remove, alter, or obscure any proprietary notices, labels, or marks on
+      the Software;
+   e) Use the Software to build a competing product or service;
+   f) Use the Software for any unlawful purpose.
+
+
+2. INTELLECTUAL PROPERTY
+
+   The Software and all copies thereof are proprietary to the Company and title
+   thereto remains in the Company. All rights in the Software not specifically
+   granted in this Agreement are reserved to the Company. The Software is
+   protected by copyright laws and international treaty provisions.
+
+
+3. CONFIDENTIALITY
+
+   The Software contains trade secrets and proprietary information of the
+   Company. You agree to maintain the confidentiality of the Software and not
+   to disclose it to any third party without the prior written consent of
+   the Company.
+
+
+4. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. THE COMPANY DOES
+   NOT WARRANT THAT THE SOFTWARE WILL BE ERROR-FREE OR UNINTERRUPTED.
+
+
+5. LIMITATION OF LIABILITY
+
+   IN NO EVENT SHALL THE COMPANY, ITS DIRECTORS, OFFICERS, EMPLOYEES, OR
+   AGENTS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR
+   PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF OR INABILITY TO
+   USE THE SOFTWARE, EVEN IF THE COMPANY HAS BEEN ADVISED OF THE POSSIBILITY
+   OF SUCH DAMAGES.
+
+
+6. TERMINATION
+
+   This license is effective until terminated. The Company may terminate this
+   Agreement at any time if you fail to comply with any term herein. Upon
+   termination, you must destroy all copies of the Software in your possession
+   and cease all use.
+
+
+7. GOVERNING LAW
+
+   This Agreement shall be governed by and construed in accordance with the
+   laws of India. Any disputes arising under this Agreement shall be subject
+   to the exclusive jurisdiction of the courts in Kerala, India.
+
+
+8. THIRD-PARTY COMPONENTS
+
+   The Software may include third-party open-source components, each subject to
+   its own license terms. Such licenses are found in the respective component
+   directories and are not affected by this Agreement.
+
+
+9. ENTIRE AGREEMENT
+
+   This Agreement constitutes the entire agreement between you and the Company
+   regarding the Software and supersedes all prior agreements, whether written
+   or oral.
+
+
+For licensing inquiries, contact: legal@scalix.world
