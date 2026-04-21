@@ -1,5 +1,5 @@
 {
-  "name": "@scalix/cli",
+  "name": "@scalix-world/cli",
   "version": "1.0.0",
   "description": "Scalix Hosting CLI - Deploy and manage applications from the command line",
   "main": "dist/index.js",

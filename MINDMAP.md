@@ -1,5 +1,5 @@
 # CLI - Architecture Mindmap
-> Auto-generated 2026-02-10 | Scalix CLI Tool (`@scalix/cli` v1.0.0)
+> Auto-generated 2026-02-10 | Scalix CLI Tool (`@scalix-world/cli` v1.0.0)
 
 ## Overview
 
@@ -215,7 +215,7 @@ All API calls go through the centralized `apiClient` Axios instance in `src/util
 ## Build & Distribution
 
 - **Build**: `npm run build` -> `tsc` -> compiles `src/` to `dist/` with declarations and source maps
-- **Binary**: `npm install -g @scalix/cli` -> `scalix` command available globally
+- **Binary**: `npm install -g @scalix-world/cli` -> `scalix` command available globally
 - **Entry**: `./dist/index.js` (with `#!/usr/bin/env node` shebang)
 - **Pre-publish**: Runs build + tests + lint before npm publish
 - **Dev Mode**: `npm run dev` -> `tsx watch src/index.ts` (hot-reload)

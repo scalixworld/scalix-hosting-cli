@@ -5,13 +5,13 @@ Command-line interface for Scalix Hosting - Deploy and manage applications from 
 ## Installation
 
 ```bash
-npm install -g @scalix/cli
+npm install -g @scalix-world/cli
 ```
 
 Or using yarn:
 
 ```bash
-yarn global add @scalix/cli
+yarn global add @scalix-world/cli
 ```
 
 ## Authentication

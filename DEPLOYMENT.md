@@ -4,7 +4,7 @@
 
 ### Prerequisites
 
-1. npm account with access to `@scalix/cli` package
+1. npm account with access to `@scalix-world/cli` package
 2. npm authentication configured (`npm login`)
 
 ### Build & Test
@@ -66,7 +66,7 @@ After publishing, verify installation:
 
 ```bash
 # Test global installation
-npm install -g @scalix/cli
+npm install -g @scalix-world/cli
 
 # Verify CLI works
 scalix --version
@@ -80,13 +80,13 @@ scalix login
 Users can install the CLI via npm:
 
 ```bash
-npm install -g @scalix/cli
+npm install -g @scalix-world/cli
 ```
 
 Or using yarn:
 
 ```bash
-yarn global add @scalix/cli
+yarn global add @scalix-world/cli
 ```
 
 ## Distribution
