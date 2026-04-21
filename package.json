@@ -26,7 +26,7 @@
     "serverless"
   ],
   "author": "Scalix",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "archiver": "^7.0.1",
     "axios": "^1.13.2",
