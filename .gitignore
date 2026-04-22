@@ -1,9 +1,7 @@
 node_modules/
 dist/
-*.log
-.DS_Store
+*.tgz
 .env
-.env.local
-*.zip
-.scalix-deploy.zip
+.env.*
+!.env.example
 
