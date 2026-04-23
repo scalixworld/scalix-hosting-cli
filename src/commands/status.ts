@@ -50,12 +50,6 @@ export async function statusCommand(deploymentId: string) {
         process.stdout.write(`  URL: ${chalk.blue(deployment.cloudRunUrl)}\n`);
       }
 
-      if (deployment.databaseId) {
-        process.stdout.write(`  Database: ${chalk.cyan('Neon')} (${deployment.databaseId})\n`);
-      } else if (deployment.supabaseProjectId) {
-        process.stdout.write(`  Database: ${chalk.cyan('Supabase')} (${deployment.supabaseProjectId})\n`);
-      }
-
       process.stdout.write(`  Created: ${chalk.gray(new Date(deployment.createdAt).toLocaleString())}\n`);
       process.stdout.write(`  Updated: ${chalk.gray(new Date(deployment.updatedAt).toLocaleString())}\n`);
 

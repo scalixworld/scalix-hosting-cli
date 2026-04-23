@@ -84,24 +84,24 @@ describe('Config Command', () => {
   describe('Get Configuration', () => {
     it('should get configuration value when --get is used', async () => {
       process.env.SCALIX_API_URL = 'https://api.example.com'
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
       await configCommand({ get: 'api_url' })
 
-      // Should output the value
-      expect(consoleSpy).toHaveBeenCalledWith('https://api.example.com')
-      consoleSpy.mockRestore()
+      // The source uses process.stdout.write, not console.log
+      expect(writeSpy).toHaveBeenCalledWith('https://api.example.com\n')
+      writeSpy.mockRestore()
     })
 
     it('should handle case-insensitive key lookup', async () => {
       process.env.SCALIX_API_URL = 'https://api.example.com'
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
       await configCommand({ get: 'API_URL' })
 
       // Should find the value
-      expect(consoleSpy).toHaveBeenCalledWith('https://api.example.com')
-      consoleSpy.mockRestore()
+      expect(writeSpy).toHaveBeenCalledWith('https://api.example.com\n')
+      writeSpy.mockRestore()
     })
 
     it('should fail when key not found', async () => {

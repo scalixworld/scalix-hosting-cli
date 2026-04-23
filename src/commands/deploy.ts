@@ -22,7 +22,6 @@ import { validateAppName, validateEnvVarName, validateEnvVarValue } from '../uti
 interface DeployOptions {
   dir?: string
   name?: string
-  database?: string
   env?: string
   envVar?: string[]
 }
@@ -63,37 +62,6 @@ async function pollDeploymentStatus(deploymentId: string, _token: string, spinne
 
   spinner.warn('Deployment is taking longer than expected');
   process.stdout.write(chalk.yellow('\nUse "scalix status <deployment-id>" to check deployment status\n'));
-}
-
-async function pollDatabaseStatus(databaseId: string, token: string, spinner: any): Promise<string | null> {
-  const MAX_ATTEMPTS = 60;
-  const POLL_INTERVAL = 3000;
-  let attempts = 0;
-
-  while (attempts < MAX_ATTEMPTS) {
-    try {
-      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
-
-      const response = await apiClient.get(`/api/scalixdb/databases/${databaseId}/connection`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const connectionString = response.data.connectionString;
-
-      if (typeof connectionString === 'string' && connectionString.length > 0) {
-        return connectionString;
-      }
-
-      attempts++;
-      spinner.text = `Provisioning ScalixDB... [${attempts}/${MAX_ATTEMPTS}]`;
-    } catch (error: any) {
-      if (error.message && error.message.includes('Database creation failed')) {
-        throw error;
-      }
-      // Ignore transient errors during polling
-    }
-  }
-
-  throw new Error('Database provisioning timed out');
 }
 
 export async function deployCommand(options: DeployOptions) {
@@ -262,44 +230,6 @@ export async function deployCommand(options: DeployOptions) {
       sourceType: 'upload',
       environmentVariables: envVars
     };
-
-    // Add database selection
-    if (options.database && options.database !== 'none') {
-      if (options.database === 'scalixdb') {
-        spinner.text = 'Provisioning ScalixDB instance...';
-        try {
-          const dbResponse = await apiClient.post('/api/scalixdb/databases', {
-            name: appName
-          }, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-
-          if (dbResponse.data.database) {
-            const dbId = dbResponse.data.database.id;
-            process.stdout.write(chalk.green(`\n✓ ScalixDB instance initiated: ${dbId}\n`));
-
-            spinner.text = 'Waiting for database provisioning...';
-            const connectionString = await pollDatabaseStatus(dbId, token, spinner);
-
-            if (connectionString) {
-              deploymentData.environmentVariables = {
-                ...deploymentData.environmentVariables,
-                DATABASE_URL: deploymentData.environmentVariables.DATABASE_URL || connectionString
-              };
-              process.stdout.write(chalk.green(`✓ ScalixDB ready and connected\n`));
-            }
-          }
-        } catch (error: any) {
-          process.stdout.write(chalk.yellow('\n⚠ Database creation failed, continuing without database\n'));
-          process.stdout.write(chalk.gray(`Error: ${error.response?.data?.error || error.message}\n`));
-        }
-      } else {
-        process.stdout.write(chalk.yellow(`\n⚠ Database option "${options.database}" is no longer supported via Hosting endpoints.\n`));
-        process.stdout.write(chalk.gray('Use "--database=scalixdb" or pass your own DATABASE_URL via --env/--envVar.\n'));
-      }
-    }
 
     // Deploy
     const response = await apiClient.post('/api/hosting/deploy', deploymentData, {

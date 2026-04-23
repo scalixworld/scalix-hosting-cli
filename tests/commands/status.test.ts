@@ -128,46 +128,6 @@ describe('Status Command', () => {
       expect(apiUtils.apiClient.get).toHaveBeenCalledTimes(statuses.length)
     })
 
-    it('should display database information for Neon', async () => {
-      vi.mocked(tokenUtils.getToken).mockResolvedValue('mock-token')
-      vi.mocked(apiUtils.apiClient.get).mockResolvedValue({
-        data: { 
-          deployment: { 
-            id: 'deploy-123',
-            appName: 'test-app',
-            status: 'ready',
-            databaseId: 'neon-db-123',
-            createdAt: '2024-01-01T00:00:00Z',
-            updatedAt: '2024-01-01T00:00:00Z'
-          }
-        }
-      } as any)
-
-      await statusCommand('deploy-123')
-
-      expect(apiUtils.apiClient.get).toHaveBeenCalled()
-    })
-
-    it('should display database information for Supabase', async () => {
-      vi.mocked(tokenUtils.getToken).mockResolvedValue('mock-token')
-      vi.mocked(apiUtils.apiClient.get).mockResolvedValue({
-        data: { 
-          deployment: { 
-            id: 'deploy-123',
-            appName: 'test-app',
-            status: 'ready',
-            supabaseProjectId: 'supabase-proj-123',
-            createdAt: '2024-01-01T00:00:00Z',
-            updatedAt: '2024-01-01T00:00:00Z'
-          }
-        }
-      } as any)
-
-      await statusCommand('deploy-123')
-
-      expect(apiUtils.apiClient.get).toHaveBeenCalled()
-    })
-
     it('should display error message when deployment has error', async () => {
       vi.mocked(tokenUtils.getToken).mockResolvedValue('mock-token')
       vi.mocked(apiUtils.apiClient.get).mockResolvedValue({
@@ -196,10 +156,13 @@ describe('Status Command', () => {
         data: { error: 'Deployment not found' }
       } as any)
 
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+
       await statusCommand('deploy-123')
 
-      // Should display error message (code shows error but doesn't exit for response errors)
       expect(apiUtils.apiClient.get).toHaveBeenCalled()
+      expect(exitSpy).toHaveBeenCalledWith(1)
+      exitSpy.mockRestore()
     })
 
     it('should handle API errors', async () => {

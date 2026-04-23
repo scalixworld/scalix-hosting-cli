@@ -1,21 +1,22 @@
 /**
  * Tests for Login Command
+ * Covers: --token flag, --api-key manual entry, and default OAuth2 browser flow.
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import http from 'http'
 import { loginCommand } from '../../src/commands/login'
 import * as tokenUtils from '../../src/utils/token'
 import * as apiUtils from '../../src/utils/api'
 
-// Mock dependencies
+// ── Mocks ──────────────────────────────────────────────────────────────────
+
 vi.mock('inquirer', () => ({
   default: {
     prompt: vi.fn(),
   },
 }))
-vi.mock('open', () => ({
-  default: vi.fn(),
-}))
+
 vi.mock('ora', () => ({
   default: vi.fn(() => ({
     start: vi.fn().mockReturnThis(),
@@ -27,220 +28,264 @@ vi.mock('ora', () => ({
     text: '',
   })),
 }))
+
 vi.mock('chalk', () => ({
   default: {
-    red: vi.fn((str) => str),
-    green: vi.fn((str) => str),
-    yellow: vi.fn((str) => str),
-    blue: vi.fn((str) => str),
-    gray: vi.fn((str) => str),
-    bold: vi.fn((str) => str),
+    red: vi.fn((str: string) => str),
+    green: vi.fn((str: string) => str),
+    yellow: vi.fn((str: string) => str),
+    blue: vi.fn((str: string) => str),
+    gray: vi.fn((str: string) => str),
+    bold: vi.fn((str: string) => str),
   },
 }))
+
 vi.mock('../../src/utils/token')
 vi.mock('../../src/utils/api')
 
+// We also need to prevent the real `exec` from opening a browser during tests.
+vi.mock('child_process', () => ({
+  exec: vi.fn(),
+}))
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/** Simulate the web app redirecting to the CLI callback server. */
+async function simulateCallback(port: number, code: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      { hostname: '127.0.0.1', port, path: `/callback?code=${code}`, method: 'GET' },
+      (res) => {
+        let body = ''
+        res.on('data', (chunk) => (body += chunk))
+        res.on('end', () => resolve())
+      },
+    )
+    req.on('error', reject)
+    req.end()
+  })
+}
+
+// ── Tests ──────────────────────────────────────────────────────────────────
+
 describe('Login Command', () => {
+  let exitSpy: ReturnType<typeof vi.spyOn>
+
   beforeEach(() => {
     vi.clearAllMocks()
+    process.env.NODE_ENV = 'test'
+    exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
   })
 
   afterEach(() => {
-    vi.restoreAllMocks()
+    exitSpy.mockRestore()
+    delete process.env.NODE_ENV
   })
 
-  describe('Token-based Login', () => {
-    it('should save token when provided via --token flag', async () => {
-      vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
+  // ── --token flag ───────────────────────────────────────────────────────
+
+  describe('Token-based Login (--token)', () => {
+    it('should save token when provided and valid', async () => {
       vi.mocked(apiUtils.apiClient.get).mockResolvedValue({
-        data: { valid: true }
+        status: 200,
+        data: { user: { id: 'u1' } },
       } as any)
+      vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
 
       await loginCommand({ token: 'test-token-123' })
 
-      expect(apiUtils.apiClient.get).toHaveBeenCalledWith('/api/cli/auth/verify', expect.any(Object))
+      expect(apiUtils.apiClient.get).toHaveBeenCalledWith('/api/auth/me', {
+        headers: { Authorization: 'Bearer test-token-123' },
+      })
       expect(tokenUtils.saveToken).toHaveBeenCalledWith('test-token-123')
     })
 
-    it('should not open browser when token is provided', async () => {
-      const openModule = await import('open')
-      vi.mocked(openModule.default).mockResolvedValue(undefined)
+    it('should exit(1) when token verification fails', async () => {
+      vi.mocked(apiUtils.apiClient.get).mockRejectedValue(new Error('401'))
       vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
+
+      await loginCommand({ token: 'bad-token' })
+
+      // process.exit is mocked so execution continues past the exit call,
+      // but we verify that exit(1) was invoked to signal the failure.
+      expect(exitSpy).toHaveBeenCalledWith(1)
+    })
+  })
+
+  // ── --api-key flag ─────────────────────────────────────────────────────
+
+  describe('API-Key Login (--api-key)', () => {
+    it('should prompt for API key and save on success', async () => {
+      const inquirerModule = await import('inquirer')
+      vi.mocked(inquirerModule.default.prompt).mockResolvedValue({ apiKey: 'valid-api-key-12345' })
       vi.mocked(apiUtils.apiClient.get).mockResolvedValue({
-        data: { valid: true }
+        status: 200,
+        data: { user: { id: 'u1' } },
       } as any)
-
-      await loginCommand({ token: 'test-token-123' })
-
-      expect(openModule.default).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('OAuth2 Flow', () => {
-    beforeEach(() => {
-      // Set test environment for faster polling
-      process.env.NODE_ENV = 'test'
-    })
-
-    afterEach(() => {
-      delete process.env.NODE_ENV
-    })
-
-    it('should open browser for OAuth2 authentication', async () => {
-      const openModule = await import('open')
-      const inquirerModule = await import('inquirer')
-      
-      vi.mocked(openModule.default).mockResolvedValue(undefined)
-      // Mock polling to fail immediately with non-404 to exit loop quickly, then manual entry
-      vi.mocked(apiUtils.apiClient.get)
-        .mockRejectedValueOnce({ response: { status: 500 } }) // First poll fails with non-404 to exit loop immediately
-        .mockResolvedValueOnce({ data: { valid: true } }) // Verification succeeds
-      vi.mocked(inquirerModule.default.prompt).mockResolvedValue({ manualToken: 'oauth-token-123' })
       vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
 
-      await loginCommand({})
-
-      expect(openModule.default).toHaveBeenCalled()
-      expect(openModule.default).toHaveBeenCalledWith(
-        expect.stringContaining('/api/cli/auth/oauth')
-      )
-      expect(inquirerModule.default.prompt).toHaveBeenCalled()
-      expect(tokenUtils.saveToken).toHaveBeenCalledWith('oauth-token-123')
-    })
-
-    it('should prompt user for token after opening browser', async () => {
-      const openModule = await import('open')
-      const inquirerModule = await import('inquirer')
-      
-      vi.mocked(openModule.default).mockResolvedValue(undefined)
-      // Mock polling to fail immediately with non-404 to exit loop quickly, then manual entry
-      vi.mocked(apiUtils.apiClient.get)
-        .mockRejectedValueOnce({ response: { status: 500 } }) // Poll fails with non-404 to exit loop immediately
-        .mockResolvedValueOnce({ data: { valid: true } }) // Verification succeeds
-      vi.mocked(inquirerModule.default.prompt).mockResolvedValue({ manualToken: 'user-pasted-token' })
-      vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
-
-      await loginCommand({})
+      await loginCommand({ apiKey: true })
 
       expect(inquirerModule.default.prompt).toHaveBeenCalled()
-      expect(tokenUtils.saveToken).toHaveBeenCalledWith('user-pasted-token')
+      expect(tokenUtils.saveToken).toHaveBeenCalledWith('valid-api-key-12345')
     })
 
-    it('should validate token input', async () => {
-      const openModule = await import('open')
+    it('should exit(1) when prompted API key is invalid', async () => {
       const inquirerModule = await import('inquirer')
-      
-      vi.mocked(openModule.default).mockResolvedValue(undefined)
-      vi.mocked(apiUtils.apiClient.get)
-        .mockRejectedValueOnce({ response: { status: 500 } }) // Poll fails
-        .mockResolvedValueOnce({ data: { valid: true } }) // Verification succeeds
-      
-      const promptMock = vi.fn().mockResolvedValue({ manualToken: 'short' })
-      vi.mocked(inquirerModule.default.prompt).mockImplementation(promptMock)
-      vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
+      vi.mocked(inquirerModule.default.prompt).mockResolvedValue({ apiKey: 'invalid-key-000' })
+      vi.mocked(apiUtils.apiClient.get).mockRejectedValue(new Error('401'))
 
-      await loginCommand({})
-
-      // The validation should reject short tokens
-      const validateFn = promptMock.mock.calls[0]?.[0]?.[0]?.validate
-      if (validateFn) {
-        const result = validateFn('short')
-        expect(result).toBe('Please enter a valid token')
-      }
-    })
-
-    it('should accept valid token input', async () => {
-      const openModule = await import('open')
-      const inquirerModule = await import('inquirer')
-      
-      vi.mocked(openModule.default).mockResolvedValue(undefined)
-      vi.mocked(apiUtils.apiClient.get)
-        .mockRejectedValueOnce({ response: { status: 500 } }) // Poll fails
-        .mockResolvedValueOnce({ data: { valid: true } }) // Verification succeeds
-      
-      const promptMock = vi.fn().mockResolvedValue({ manualToken: 'valid-long-token-12345' })
-      vi.mocked(inquirerModule.default.prompt).mockImplementation(promptMock)
-      vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
-
-      await loginCommand({})
-
-      // The validation should accept long tokens
-      const validateFn = promptMock.mock.calls[0]?.[0]?.[0]?.validate
-      if (validateFn) {
-        const result = validateFn('valid-long-token-12345')
-        expect(result).toBe(true)
-      }
-    })
-
-    it('should generate state parameter for OAuth2', async () => {
-      const openModule = await import('open')
-      vi.mocked(openModule.default).mockResolvedValue(undefined)
-      
-      const inquirerModule = await import('inquirer')
-      vi.mocked(apiUtils.apiClient.get)
-        .mockRejectedValueOnce({ response: { status: 500 } }) // Poll fails
-        .mockResolvedValueOnce({ data: { valid: true } }) // Verification succeeds
-      vi.mocked(inquirerModule.default.prompt).mockResolvedValue({ manualToken: 'test-token' })
-      vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
-
-      await loginCommand({})
-
-      const callArgs = vi.mocked(openModule.default).mock.calls[0]?.[0] as string
-      expect(callArgs).toContain('state=')
-    })
-
-    it('should use correct API URL for OAuth2', async () => {
-      const openModule = await import('open')
-      vi.mocked(openModule.default).mockResolvedValue(undefined)
-      
-      const inquirerModule = await import('inquirer')
-      vi.mocked(apiUtils.apiClient.get)
-        .mockRejectedValueOnce({ response: { status: 500 } }) // Poll fails
-        .mockResolvedValueOnce({ data: { valid: true } }) // Verification succeeds
-      vi.mocked(inquirerModule.default.prompt).mockResolvedValue({ manualToken: 'test-token' })
-      vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
-
-      await loginCommand({})
-
-      const callArgs = vi.mocked(openModule.default).mock.calls[0]?.[0] as string
-      const apiUrl = process.env.SCALIX_API_URL || 'https://app.scalix.com'
-      expect(callArgs).toContain(apiUrl)
-    })
-  })
-
-  describe('Error Handling', () => {
-    it('should handle browser open failure', async () => {
-      const openModule = await import('open')
-      vi.mocked(openModule.default).mockRejectedValue(new Error('Browser failed to open'))
-      
-      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
-
-      try {
-        await loginCommand({})
-      } catch {
-        // Expected
-      }
+      await loginCommand({ apiKey: true })
 
       expect(exitSpy).toHaveBeenCalledWith(1)
-      exitSpy.mockRestore()
     })
 
-    it('should handle token save failure', async () => {
-      const openModule = await import('open')
-      vi.mocked(openModule.default).mockResolvedValue(undefined)
-      
+    it('should validate minimum API key length in the prompt', async () => {
       const inquirerModule = await import('inquirer')
-      // Mock polling to fail immediately with non-404 to exit loop quickly
-      vi.mocked(apiUtils.apiClient.get)
-        .mockRejectedValueOnce({ response: { status: 500 } }) // Poll fails with non-404 to exit loop immediately
-        .mockResolvedValueOnce({ data: { valid: true } }) // Verification succeeds
-      vi.mocked(inquirerModule.default.prompt).mockResolvedValue({ manualToken: 'test-token' })
+      const promptMock = vi.fn().mockResolvedValue({ apiKey: 'valid-key-12345' })
+      vi.mocked(inquirerModule.default.prompt).mockImplementation(promptMock)
+      vi.mocked(apiUtils.apiClient.get).mockResolvedValue({
+        status: 200,
+        data: { user: { id: 'u1' } },
+      } as any)
       vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
-      
-      await loginCommand({})
 
-      expect(tokenUtils.saveToken).toHaveBeenCalled()
+      await loginCommand({ apiKey: true })
+
+      // Grab the validate function from the prompt config
+      const validateFn = promptMock.mock.calls[0]?.[0]?.[0]?.validate
+      expect(validateFn).toBeDefined()
+      expect(validateFn('short')).toBe('Please enter a valid API key')
+      expect(validateFn('long-enough-key')).toBe(true)
     })
   })
-})
 
+  // ── OAuth2 browser flow (default) ──────────────────────────────────────
+
+  describe('OAuth2 Browser Flow (default)', () => {
+    it('should start local server, receive callback, exchange code, and save token', async () => {
+      // Mock the exchange endpoint
+      vi.mocked(apiUtils.apiClient.post).mockResolvedValue({
+        data: { token: 'exchanged-token-xyz' },
+      } as any)
+      vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
+
+      // Start login (non-blocking) -- it will start a local server and wait
+      const loginPromise = loginCommand({})
+
+      // Give the server a moment to start listening
+      await new Promise((r) => setTimeout(r, 100))
+
+      // We need to find the port the server chose. The exec mock was called
+      // with the URL containing the port.
+      const { exec: execMock } = await import('child_process')
+      const execCalls = vi.mocked(execMock).mock.calls
+      expect(execCalls.length).toBeGreaterThan(0)
+
+      // Extract port from the URL passed to exec
+      const openedUrl = execCalls[0][0] as string
+      expect(openedUrl).toContain('/cli-auth?port=')
+      const portMatch = openedUrl.match(/port=(\d+)/)
+      expect(portMatch).not.toBeNull()
+      const port = parseInt(portMatch![1], 10)
+
+      // Simulate the browser redirect with an auth code
+      await simulateCallback(port, 'my-auth-code')
+
+      // Wait for the login promise to resolve
+      await loginPromise
+
+      // Verify the exchange call
+      expect(apiUtils.apiClient.post).toHaveBeenCalledWith('/api/auth/exchange-auth-code', {
+        code: 'my-auth-code',
+      })
+      expect(tokenUtils.saveToken).toHaveBeenCalledWith('exchanged-token-xyz')
+    })
+
+    it('should exit(1) when exchange returns no token', async () => {
+      vi.mocked(apiUtils.apiClient.post).mockResolvedValue({
+        data: { error: 'invalid code' },
+      } as any)
+
+      const loginPromise = loginCommand({})
+      await new Promise((r) => setTimeout(r, 100))
+
+      const { exec: execMock } = await import('child_process')
+      const execCalls = vi.mocked(execMock).mock.calls
+      const openedUrl = execCalls[0][0] as string
+      const port = parseInt(openedUrl.match(/port=(\d+)/)![1], 10)
+
+      await simulateCallback(port, 'bad-code')
+      await loginPromise
+
+      expect(exitSpy).toHaveBeenCalledWith(1)
+    })
+
+    it('should respond 404 for non-callback paths', async () => {
+      vi.mocked(apiUtils.apiClient.post).mockResolvedValue({
+        data: { token: 'tok' },
+      } as any)
+      vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
+
+      const loginPromise = loginCommand({})
+      await new Promise((r) => setTimeout(r, 100))
+
+      const { exec: execMock } = await import('child_process')
+      const openedUrl = vi.mocked(execMock).mock.calls[0][0] as string
+      const port = parseInt(openedUrl.match(/port=(\d+)/)![1], 10)
+
+      // Hit a wrong path
+      const res = await new Promise<http.IncomingMessage>((resolve, reject) => {
+        const req = http.request(
+          { hostname: '127.0.0.1', port, path: '/wrong', method: 'GET' },
+          resolve,
+        )
+        req.on('error', reject)
+        req.end()
+      })
+      expect(res.statusCode).toBe(404)
+
+      // Now send correct callback so login completes
+      await simulateCallback(port, 'code')
+      await loginPromise
+    })
+
+    it('should respond 400 when callback has no code', async () => {
+      vi.mocked(apiUtils.apiClient.post).mockResolvedValue({
+        data: { token: 'tok' },
+      } as any)
+      vi.mocked(tokenUtils.saveToken).mockResolvedValue(undefined)
+
+      const loginPromise = loginCommand({})
+      await new Promise((r) => setTimeout(r, 100))
+
+      const { exec: execMock } = await import('child_process')
+      const openedUrl = vi.mocked(execMock).mock.calls[0][0] as string
+      const port = parseInt(openedUrl.match(/port=(\d+)/)![1], 10)
+
+      // Hit callback without code param
+      const res = await new Promise<http.IncomingMessage>((resolve, reject) => {
+        const req = http.request(
+          { hostname: '127.0.0.1', port, path: '/callback', method: 'GET' },
+          resolve,
+        )
+        req.on('error', reject)
+        req.end()
+      })
+      expect(res.statusCode).toBe(400)
+
+      // Complete normally
+      await simulateCallback(port, 'code')
+      await loginPromise
+    })
+
+    it('should time out in test mode (short timeout)', async () => {
+      // Don't send any callback -- should time out after ~500ms in test mode
+      const loginPromise = loginCommand({})
+
+      await loginPromise
+
+      expect(exitSpy).toHaveBeenCalledWith(1)
+    }, 5000)
+  })
+})

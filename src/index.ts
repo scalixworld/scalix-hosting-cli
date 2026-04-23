@@ -16,6 +16,7 @@ import { configCommand } from './commands/config';
 import { deleteCommand } from './commands/delete';
 import { updateCommand } from './commands/update';
 import { rollbackCommand } from './commands/rollback';
+import { registerDbCommand } from './commands/db';
 
 // Get version from package.json
 function getVersion(): string {
@@ -46,6 +47,8 @@ program
   .command('login')
   .description('Authenticate with Scalix Hosting')
   .option('--token <token>', 'Use existing token')
+  .option('--api-key', 'Log in by entering an API key manually')
+  .option('--browser', 'Log in via browser OAuth2 flow (default)')
   .action(loginCommand);
 
 program
@@ -59,7 +62,6 @@ program
   .description('Deploy an application')
   .option('-d, --dir <directory>', 'Directory to deploy', '.')
   .option('-n, --name <name>', 'Application name')
-  .option('--database <type>', 'Database type (neon|supabase|scalixdb|none)', 'none')
   .option('--env <file>', 'Environment variables file (.env)')
   .option('--env-var <key=value>', 'Environment variable (can be used multiple times)', (val: string, prev: string[]) => {
     prev.push(val);
@@ -130,6 +132,9 @@ program
   .option('-v, --version <version>', 'Version to rollback to')
   .option('-f, --force', 'Skip confirmation prompt')
   .action(rollbackCommand);
+
+// Database management (ScalixDB)
+registerDbCommand(program);
 
 // Parse arguments
 program.parse();

@@ -172,10 +172,14 @@ describe('List Command', () => {
         data: { error: 'Failed to fetch deployments' }
       } as any)
 
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+
       await listCommand({})
 
-      // Should display error message (code shows error but doesn't exit for response errors)
+      // When deployments key is missing, the code exits with 1
       expect(apiUtils.apiClient.get).toHaveBeenCalled()
+      expect(exitSpy).toHaveBeenCalledWith(1)
+      exitSpy.mockRestore()
     })
 
     it('should display error details from API response', async () => {

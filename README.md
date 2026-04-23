@@ -1,6 +1,6 @@
-# Scalix CLI
+# Scalix Hosting CLI
 
-Command-line interface for Scalix Hosting - Deploy and manage applications from the terminal.
+Command-line interface for Scalix Hosting - Deploy and manage static site applications from the terminal.
 
 ## Installation
 
@@ -16,15 +16,43 @@ yarn global add @scalix-world/cli
 
 ## Authentication
 
-Before using the CLI, you need to authenticate:
+### Browser Login (default)
+
+The easiest way to authenticate is through your browser:
 
 ```bash
 scalix login
 ```
 
-This will open your browser for OAuth2 authentication. The CLI will automatically retrieve your token after authentication. Your token will be stored securely.
+This opens your default browser to the Scalix login page. After you sign in, the CLI receives a token automatically through a local callback server and stores it at `~/.scalix/token` (with `0600` permissions). No copy-pasting required.
 
-To log out:
+You can also explicitly request browser login:
+
+```bash
+scalix login --browser
+```
+
+### API Key Login
+
+If you prefer to enter an API key manually (useful for CI/CD or headless environments):
+
+```bash
+scalix login --api-key
+```
+
+You will be prompted to enter your Scalix API key, which you can generate at https://scalix.world/settings/api-keys.
+
+### Direct Token
+
+You can also pass a token directly:
+
+```bash
+scalix login --token <your-api-key>
+```
+
+### Logout
+
+To log out (removes the stored token):
 
 ```bash
 scalix logout
@@ -44,13 +72,12 @@ scalix deploy --dir ./my-app
 # Deploy with app name
 scalix deploy --name my-awesome-app
 
-# Deploy with database
-scalix deploy --database neon
-
 # Deploy with environment variables
 scalix deploy --env .env
 scalix deploy --env-var NODE_ENV=production --env-var API_KEY=secret
 ```
+
+The deploy command packages the directory into a ZIP (excluding `node_modules` and hidden files other than `.env`), uploads it to the Scalix Hosting API, and polls for deployment completion.
 
 ### List Deployments
 
@@ -91,16 +118,6 @@ scalix update <deployment-id>
 scalix update <deployment-id> --env .env.production
 ```
 
-### Delete Deployment
-
-```bash
-# Delete a deployment (with confirmation)
-scalix delete <deployment-id>
-
-# Delete without confirmation
-scalix delete <deployment-id> --force
-```
-
 ### Rollback Deployment
 
 ```bash
@@ -124,39 +141,94 @@ scalix config --list
 scalix config --get API_URL
 
 # Set configuration value
-scalix config --set API_URL=https://api.scalix.com
+scalix config --set API_URL=https://api.scalix.world
 ```
 
-## Security
+### ScalixDB Database Management
 
-- Tokens are stored securely using OS keychain
-- All API requests use HTTPS
-- Short-lived access tokens (24 hours)
-- Automatic token refresh
-- Token revocation support
+Manage ScalixDB databases directly from the CLI.
+
+#### Databases
+
+```bash
+# List all databases
+scalix db list
+
+# Create a new database
+scalix db create --name my-db
+scalix db create --name my-db --plan pro --region us-east-1
+
+# Show database details
+scalix db info <database-id>
+
+# Delete a database (with confirmation)
+scalix db delete <database-id>
+scalix db delete <database-id> --force
+```
+
+#### Querying & Tables
+
+```bash
+# Execute a SQL query
+scalix db query <database-id> --sql "SELECT * FROM users LIMIT 10"
+
+# List tables
+scalix db tables <database-id>
+```
+
+#### Monitoring
+
+```bash
+# Show database metrics (CPU, memory, connections, storage)
+scalix db metrics <database-id>
+
+# Show connection string
+scalix db connection <database-id>
+
+# Show database logs
+scalix db logs <database-id>
+
+# Show connection pooling status
+scalix db pooling <database-id>
+
+# List installed extensions
+scalix db extensions <database-id>
+```
+
+#### Backups
+
+```bash
+# List backups
+scalix db backup list <database-id>
+
+# Create a backup
+scalix db backup create <database-id>
+scalix db backup create <database-id> --name "pre-migration"
+
+# Restore from a backup
+scalix db backup restore <database-id> <backup-id>
+```
+
+#### Branches
+
+```bash
+# List database branches
+scalix db branches <database-id>
+
+# Create a branch
+scalix db branch create <database-id> --name staging
+```
 
 ## Environment Variables
 
-- `SCALIX_API_URL`: API base URL (default: https://app.scalix.com)
-- `SCALIX_TOKEN`: Authentication token (stored securely by default)
+- `SCALIX_API_URL`: Override the API base URL (default: `https://api.scalix.world`)
+- `SCALIX_TOKEN`: Can also be set as an environment variable instead of using `scalix login`
 
-## Examples
+## Limitations
 
-```bash
-# Deploy a Node.js app
-scalix deploy --name my-api --database neon
-
-# Deploy with environment variables
-scalix deploy --env .env.production --env-var NODE_ENV=production
-
-# Check deployment status
-scalix status deploy-123456
-
-# View logs
-scalix logs deploy-123456 --follow
-```
+- The `delete` command is not yet functional (the Cloud API endpoint does not exist yet).
+- Deployment size is limited to 100 MB.
 
 ## Support
 
-For issues and questions, visit: https://scalix.com/support
-
+For issues and questions, visit: https://scalix.world/support

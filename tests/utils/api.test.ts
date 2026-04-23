@@ -78,7 +78,7 @@ describe('API Utilities', () => {
 
     it('should use default base URL when SCALIX_API_URL not set', () => {
       const createCall = vi.mocked(axios.create).mock.calls[0]?.[0]
-      expect(createCall?.baseURL).toBe(process.env.SCALIX_API_URL || 'https://app.scalix.com')
+      expect(createCall?.baseURL).toBe(process.env.SCALIX_API_URL || 'https://api.scalix.world')
     })
 
     it('should set correct timeout for deployments', () => {

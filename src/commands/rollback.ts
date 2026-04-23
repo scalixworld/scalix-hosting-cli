@@ -33,7 +33,7 @@ export async function rollbackCommand(deploymentId: string, options: { version?:
     spinner.text = 'Fetching deployment history...';
     let history: any[] = [];
     try {
-      const historyResponse = await apiClient.get(`/api/hosting/deployments/${deploymentId}/history`);
+      const historyResponse = await apiClient.get(`/api/hosting/deployments/${deploymentId}/rollback-history`);
       history = historyResponse.data.history || [];
     } catch (error: any) {
       spinner.fail('Failed to fetch deployment history');

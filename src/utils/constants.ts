@@ -17,10 +17,6 @@ export const DEPLOYMENT_POLL_INTERVAL = 5000; // 5 seconds
 export const DEPLOYMENT_MAX_ATTEMPTS = 120; // 10 minutes (120 * 5 seconds)
 export const LOGS_POLL_INTERVAL = 2000; // 2 seconds
 export const LOGS_FOLLOW_TAIL = 1000; // Number of log lines to fetch when following
-export const OAUTH_POLL_INTERVAL = 5000; // 5 seconds
-export const OAUTH_MAX_ATTEMPTS = 60; // 5 minutes (60 * 5 seconds)
-export const OAUTH_POLL_INTERVAL_TEST = 10; // 10ms for tests
-
 // Retry Configuration
 export const MAX_RETRIES = 3;
 export const RETRY_DELAY_BASE = 1000; // 1 second base delay
