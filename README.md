@@ -219,6 +219,40 @@ scalix db branches <database-id>
 scalix db branch create <database-id> --name staging
 ```
 
+## API Endpoints
+
+All requests go to `https://api.scalix.world` (override with `SCALIX_API_URL` env var).
+
+### Authentication
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/auth/me` | Current user info |
+| POST | `/api/auth/exchange-auth-code` | Exchange auth code for token |
+| GET | `/api/cli/auth/verify` | Verify CLI token |
+| GET | `/api/cli/auth/callback?state={state}` | OAuth callback polling |
+
+### Hosting
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/hosting/deploy` | Deploy application |
+| GET | `/api/hosting/deployments` | List deployments |
+| GET | `/api/hosting/deployments/{id}` | Get deployment status |
+| PUT | `/api/hosting/deployments/{id}` | Update deployment |
+| DELETE | `/api/hosting/deployments/{id}` | Delete deployment |
+| POST | `/api/hosting/deployments/{id}/rollback` | Rollback deployment |
+| GET | `/api/hosting/deployments/{id}/health` | Deployment health check |
+| GET | `/api/hosting/logs` | Deployment logs |
+| GET/POST/DELETE | `/api/hosting/domains` | Domain management |
+| GET/POST/DELETE | `/api/hosting/environment` | Environment variables |
+
+### ScalixDB
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| * | `/api/scalixdb/databases/*` | Database management |
+
 ## Environment Variables
 
 - `SCALIX_API_URL`: Override the API base URL (default: `https://api.scalix.world`)

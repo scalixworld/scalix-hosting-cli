@@ -131,7 +131,7 @@ The Scalix CLI is a Node.js command-line tool for deploying and managing applica
 ### Utilities
 
 - **`src/utils/api.ts`** -- API Client
-  - Creates Axios instance with base URL from `SCALIX_API_URL` env or `https://app.scalix.com`
+  - Creates Axios instance with base URL from `SCALIX_API_URL` env or `https://api.scalix.world`
   - 5-minute timeout (`API_TIMEOUT = 300000ms`)
   - User-Agent header: `scalix-cli/{version}`
   - Request interceptor: Auto-injects `Bearer {token}` from stored token
@@ -161,7 +161,7 @@ The Scalix CLI is a Node.js command-line tool for deploying and managing applica
   - `sanitizeAppName(input)`: lowercases, replaces invalid chars with hyphens
 
 - **`src/utils/constants.ts`** -- Centralized Configuration
-  - API: `DEFAULT_API_URL = 'https://app.scalix.com'`, `API_TIMEOUT = 300000`
+  - API: `DEFAULT_API_URL = 'https://api.scalix.world'`, `API_TIMEOUT = 300000`
   - Deployment: `MAX_DEPLOYMENT_SIZE_MB = 100`
   - Polling: `DEPLOYMENT_POLL_INTERVAL = 5000`, `DEPLOYMENT_MAX_ATTEMPTS = 120`
   - Logs: `LOGS_POLL_INTERVAL = 2000`, `LOGS_FOLLOW_TAIL = 1000`
@@ -199,7 +199,7 @@ All API calls go through the centralized `apiClient` Axios instance in `src/util
 | `/api/scalixdb/databases/{id}/connection` | GET | deploy | Get DB connection string |
 
 ### Base URL
-- Default: `https://app.scalix.com`
+- Default: `https://api.scalix.world`
 - Override: `SCALIX_API_URL` environment variable
 
 ## Authentication
