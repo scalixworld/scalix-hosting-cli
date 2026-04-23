@@ -17,6 +17,9 @@ import { deleteCommand } from './commands/delete';
 import { updateCommand } from './commands/update';
 import { rollbackCommand } from './commands/rollback';
 import { registerDbCommand } from './commands/db';
+import { registerDomainCommand } from './commands/domain';
+import { registerEnvCommand } from './commands/env';
+import { registerHealthCommand } from './commands/health';
 
 // Get version from package.json
 function getVersion(): string {
@@ -135,6 +138,15 @@ program
 
 // Database management (ScalixDB)
 registerDbCommand(program);
+
+// Domain management
+registerDomainCommand(program);
+
+// Environment variable management
+registerEnvCommand(program);
+
+// Deployment health
+registerHealthCommand(program);
 
 // Parse arguments
 program.parse();

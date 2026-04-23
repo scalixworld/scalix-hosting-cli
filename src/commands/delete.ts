@@ -60,21 +60,16 @@ export async function deleteCommand(deploymentId: string, options: { force?: boo
       spinner.start('Deleting deployment...');
     }
 
-    // TODO: DELETE /api/hosting/deployments/{deploymentId} endpoint does not exist
-    // in the Cloud API yet. Uncomment when the endpoint is implemented.
-    // const response = await apiClient.delete(`/api/hosting/deployments/${deploymentId}`);
-    //
-    // if (response.data.success) {
-    //   spinner.succeed('Deployment deleted successfully');
-    //   process.stdout.write(chalk.green(`\n✓ Deployment ${deploymentId} has been deleted\n`));
-    // } else {
-    //   spinner.fail('Deletion failed');
-    //   process.stderr.write(chalk.red(`\nError: ${response.data.error || 'Unknown error'}\n`));
-    //   process.exit(1);
-    // }
-    spinner.fail('Delete is not yet supported');
-    process.stderr.write(chalk.yellow('\nThe delete endpoint is not yet available in the Cloud API.\n'));
-    process.exit(1);
+    const response = await apiClient.delete(`/api/hosting/deployments/${deploymentId}`);
+
+    if (response.data.success) {
+      spinner.succeed('Deployment deleted successfully');
+      process.stdout.write(chalk.green(`\nDeployment ${deploymentId} has been deleted\n`));
+    } else {
+      spinner.fail('Deletion failed');
+      process.stderr.write(chalk.red(`\nError: ${response.data.error || 'Unknown error'}\n`));
+      process.exit(1);
+    }
   } catch (error) {
     const err = error as any;
     spinner.fail('Deletion failed');

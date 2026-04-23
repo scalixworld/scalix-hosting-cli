@@ -28,8 +28,10 @@ function handleError(spinner: ReturnType<typeof ora>, error: unknown, action: st
   const err = error as any;
   spinner.fail(`Failed to ${action}`);
   process.stderr.write(chalk.red(`\nError: ${err.message}\n`));
-  if (err.response?.data?.error) {
-    process.stderr.write(chalk.red(`Details: ${err.response.data.error}\n`));
+  const detail = err.response?.data?.error;
+  if (detail) {
+    const msg = typeof detail === 'string' ? detail : (detail.message || JSON.stringify(detail));
+    process.stderr.write(chalk.red(`Details: ${msg}\n`));
   }
   process.exit(1);
 }
