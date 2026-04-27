@@ -1,17 +1,14 @@
 #!/usr/bin/env node
 
-/**
- * Scalix CLI
- * Command-line interface for Scalix Hosting
- */
-
 import { Command } from 'commander';
 import { loginCommand } from './commands/login';
 import { logoutCommand } from './commands/logout';
+import { whoamiCommand } from './commands/whoami';
 import { deployCommand } from './commands/deploy';
 import { listCommand } from './commands/list';
 import { logsCommand } from './commands/logs';
 import { statusCommand } from './commands/status';
+import { inspectCommand } from './commands/inspect';
 import { configCommand } from './commands/config';
 import { deleteCommand } from './commands/delete';
 import { updateCommand } from './commands/update';
@@ -21,7 +18,6 @@ import { registerDomainCommand } from './commands/domain';
 import { registerEnvCommand } from './commands/env';
 import { registerHealthCommand } from './commands/health';
 
-// Get version from package.json
 function getVersion(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -36,117 +32,146 @@ function getVersion(): string {
   }
 }
 
-const version = getVersion();
-
 const program = new Command();
 
 program
-  .name('scalix')
-  .description('Scalix Hosting CLI - Deploy and manage applications')
-  .version(version);
+  .name('scalix-hosting')
+  .description('Scalix Hosting CLI — deploy and manage applications')
+  .version(getVersion())
+  .option('--json', 'Output results as JSON')
+  .option('-y, --yes', 'Skip confirmation prompts');
 
-// Authentication
+// ── Authentication ─────────────────────────────────────────────────────────
+
 program
   .command('login')
   .description('Authenticate with Scalix Hosting')
-  .option('--token <token>', 'Use existing token')
-  .option('--api-key', 'Log in by entering an API key manually')
+  .option('--token <token>', 'Use an existing token directly')
+  .option('--api-key', 'Log in with an API key')
   .option('--browser', 'Log in via browser OAuth2 flow (default)')
   .action(loginCommand);
 
 program
   .command('logout')
-  .description('Log out and clear stored authentication token')
+  .description('Clear stored authentication')
   .action(logoutCommand);
 
-// Deployment
+program
+  .command('whoami')
+  .description('Show the currently authenticated user')
+  .action((_, cmd) => {
+    const opts = cmd.optsWithGlobals();
+    return whoamiCommand({ json: opts.json });
+  });
+
+// ── Deployments ────────────────────────────────────────────────────────────
+
 program
   .command('deploy')
-  .description('Deploy an application')
+  .description('Deploy an application to Scalix Hosting')
   .option('-d, --dir <directory>', 'Directory to deploy', '.')
   .option('-n, --name <name>', 'Application name')
+  .option('--prod', 'Deploy to production (default)')
+  .option('--preview', 'Create a preview deployment')
   .option('--env <file>', 'Environment variables file (.env)')
-  .option('--env-var <key=value>', 'Environment variable (can be used multiple times)', (val: string, prev: string[]) => {
+  .option('--env-var <key=value>', 'Set an environment variable (repeatable)', (val: string, prev: string[]) => {
     prev.push(val);
     return prev;
   }, [] as string[])
-  .action(deployCommand);
+  .action((opts, cmd) => {
+    const globals = cmd.optsWithGlobals();
+    return deployCommand({ ...opts, json: globals.json, yes: globals.yes });
+  });
 
-// List deployments
 program
   .command('list')
   .alias('ls')
   .description('List all deployments')
-  .option('--status <status>', 'Filter by status')
-  .action(listCommand);
+  .option('--status <status>', 'Filter by status (ready, deploying, error)')
+  .action((opts, cmd) => {
+    const globals = cmd.optsWithGlobals();
+    return listCommand({ ...opts, json: globals.json });
+  });
 
-// View logs
-program
-  .command('logs')
-  .description('View deployment logs')
-  .argument('<deployment-id>', 'Deployment ID')
-  .option('-f, --follow', 'Follow log output')
-  .option('--tail <lines>', 'Number of lines to show', '100')
-  .action(logsCommand);
-
-// Check status
 program
   .command('status')
   .description('Check deployment status')
   .argument('<deployment-id>', 'Deployment ID')
-  .action(statusCommand);
+  .action((id, _, cmd) => {
+    const globals = cmd.optsWithGlobals();
+    return statusCommand(id, { json: globals.json });
+  });
 
-// Configuration
 program
-  .command('config')
-  .description('Manage CLI configuration')
-  .option('--set <key=value>', 'Set configuration value')
-  .option('--get <key>', 'Get configuration value')
-  .option('--list', 'List all configuration')
-  .action(configCommand);
+  .command('inspect')
+  .description('Show detailed deployment info including health metrics')
+  .argument('<deployment-id>', 'Deployment ID')
+  .action((id, _, cmd) => {
+    const globals = cmd.optsWithGlobals();
+    return inspectCommand(id, { json: globals.json });
+  });
 
-// Delete deployment
+program
+  .command('logs')
+  .description('View deployment logs')
+  .argument('<deployment-id>', 'Deployment ID')
+  .option('-f, --follow', 'Stream new log output')
+  .option('--tail <lines>', 'Number of lines to show', '100')
+  .option('--since <duration>', 'Show logs since duration (e.g. 1h, 30m)')
+  .action((id, opts, cmd) => {
+    const globals = cmd.optsWithGlobals();
+    return logsCommand(id, { ...opts, json: globals.json });
+  });
+
 program
   .command('delete')
   .alias('rm')
   .description('Delete a deployment')
   .argument('<deployment-id>', 'Deployment ID')
   .option('-f, --force', 'Skip confirmation prompt')
-  .action(deleteCommand);
+  .action((id, opts, cmd) => {
+    const globals = cmd.optsWithGlobals();
+    return deleteCommand(id, { ...opts, yes: globals.yes, json: globals.json });
+  });
 
-// Update deployment
 program
   .command('update')
-  .description('Update an existing deployment')
+  .description('Update an existing deployment with new code')
   .argument('<deployment-id>', 'Deployment ID')
   .option('-d, --dir <directory>', 'Directory to deploy', '.')
   .option('--env <file>', 'Environment variables file (.env)')
-  .option('--env-var <key=value>', 'Environment variable (can be used multiple times)', (val: string, prev: string[]) => {
+  .option('--env-var <key=value>', 'Set an environment variable (repeatable)', (val: string, prev: string[]) => {
     prev.push(val);
     return prev;
   }, [] as string[])
-  .action(updateCommand);
+  .action((id, opts, cmd) => {
+    const globals = cmd.optsWithGlobals();
+    return updateCommand(id, { ...opts, json: globals.json });
+  });
 
-// Rollback deployment
 program
   .command('rollback')
-  .description('Rollback a deployment to a previous version')
+  .description('Rollback to a previous deployment version')
   .argument('<deployment-id>', 'Deployment ID')
   .option('-v, --version <version>', 'Version to rollback to')
   .option('-f, --force', 'Skip confirmation prompt')
   .action(rollbackCommand);
 
-// Database management (ScalixDB)
+// ── Configuration ──────────────────────────────────────────────────────────
+
+program
+  .command('config')
+  .description('Manage CLI configuration')
+  .option('--set <key=value>', 'Set a configuration value')
+  .option('--get <key>', 'Get a configuration value')
+  .option('--list', 'List all configuration')
+  .action(configCommand);
+
+// ── Subcommand groups ──────────────────────────────────────────────────────
+
 registerDbCommand(program);
-
-// Domain management
 registerDomainCommand(program);
-
-// Environment variable management
 registerEnvCommand(program);
-
-// Deployment health
 registerHealthCommand(program);
 
-// Parse arguments
 program.parse();

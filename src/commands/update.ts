@@ -1,8 +1,3 @@
-/**
- * Update Command
- * Updates an existing deployment
- */
-
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
@@ -12,20 +7,45 @@ import ora from 'ora';
 import { getToken } from '../utils/token';
 import { apiClient } from '../utils/api';
 import { loadEnvFile } from '../utils/env';
+import { getGitMeta } from '../utils/git';
+import { loadIgnorePatterns, shouldIgnore } from '../utils/ignore';
 import { MAX_DEPLOYMENT_SIZE_BYTES } from '../utils/constants';
 import { validateDeploymentId, validateEnvVarName, validateEnvVarValue } from '../utils/validation';
 
 interface UpdateOptions {
-  dir?: string
-  env?: string
-  envVar?: string[]
+  dir?: string;
+  env?: string;
+  envVar?: string[];
+  json?: boolean;
+}
+
+async function addDirectoryToArchive(
+  archive: archiver.Archiver,
+  dir: string,
+  prefix: string,
+  patterns: string[]
+): Promise<void> {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (shouldIgnore(entry.name, patterns)) continue;
+
+    const fullPath = path.join(dir, entry.name);
+    const archivePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+    if (entry.isDirectory()) {
+      await addDirectoryToArchive(archive, fullPath, archivePath, patterns);
+    } else if (entry.isFile()) {
+      archive.file(fullPath, { name: archivePath });
+    }
+  }
 }
 
 export async function updateCommand(deploymentId: string, options: UpdateOptions) {
-  const spinner = ora('Updating deployment...').start();
+  const isJson = options.json;
+  const spinner = isJson ? ora({ isSilent: true }) : ora('Updating deployment...').start();
 
   try {
-    // Validate deployment ID format
     const validation = validateDeploymentId(deploymentId);
     if (!validation.valid) {
       spinner.fail('Invalid deployment ID');
@@ -36,11 +56,10 @@ export async function updateCommand(deploymentId: string, options: UpdateOptions
     const token = await getToken();
     if (!token) {
       spinner.fail('Not authenticated');
-      process.stderr.write(chalk.red('\nPlease run "scalix login" first\n'));
+      process.stderr.write(chalk.red('\nPlease run "scalix-hosting login" first\n'));
       process.exit(1);
     }
 
-    // Get deployment info
     spinner.text = 'Fetching deployment information...';
     try {
       await apiClient.get(`/api/hosting/deployments/${deploymentId}`);
@@ -50,11 +69,8 @@ export async function updateCommand(deploymentId: string, options: UpdateOptions
       process.exit(1);
     }
 
-    // Get deployment directory
     const deployDir = path.resolve(options.dir || '.');
-    spinner.text = 'Checking deployment directory...';
 
-    // Verify directory exists
     try {
       await fs.access(deployDir);
     } catch {
@@ -63,56 +79,36 @@ export async function updateCommand(deploymentId: string, options: UpdateOptions
       process.exit(1);
     }
 
+    // Load ignore patterns
+    const ignorePatterns = await loadIgnorePatterns(deployDir);
+
     spinner.text = 'Creating deployment package...';
 
-    // Create ZIP file
     const zipPath = path.join(deployDir, '.scalix-update.zip');
     const output = fsSync.createWriteStream(zipPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
-
     archive.pipe(output);
 
-    // Add files to archive
-    const files = await fs.readdir(deployDir);
-    let totalSize = 0;
-
-    for (const file of files) {
-      if (file.startsWith('.') && file !== '.env') { continue; }
-      if (file === 'node_modules') { continue; }
-      if (file === '.scalix-deploy.zip' || file === '.scalix-update.zip') { continue; }
-
-      const filePath = path.join(deployDir, file);
-      const stat = await fs.stat(filePath);
-
-      if (stat.isDirectory()) {
-        archive.directory(filePath, file);
-      } else {
-        totalSize += stat.size;
-        if (totalSize > MAX_DEPLOYMENT_SIZE_BYTES) {
-          spinner.fail('Deployment package too large');
-          const sizeMB = (MAX_DEPLOYMENT_SIZE_BYTES / 1024 / 1024).toFixed(0);
-          process.stderr.write(chalk.red(`\nTotal size exceeds ${sizeMB}MB limit\n`));
-          await archive.abort();
-          process.exit(1);
-        }
-        archive.file(filePath, { name: file });
-      }
-    }
-
+    await addDirectoryToArchive(archive, deployDir, '', ignorePatterns);
     await archive.finalize();
 
-    // Wait for ZIP to be written
     await new Promise<void>((resolve) => {
       output.on('close', () => resolve());
     });
 
-    spinner.text = 'Reading deployment package...';
+    spinner.text = 'Uploading...';
 
-    // Read ZIP file as base64
     const zipBuffer = await fs.readFile(zipPath);
     const sourceCode = zipBuffer.toString('base64');
 
-    // Clean up ZIP file
+    if (zipBuffer.length > MAX_DEPLOYMENT_SIZE_BYTES) {
+      await fs.unlink(zipPath);
+      const sizeMB = (MAX_DEPLOYMENT_SIZE_BYTES / 1024 / 1024).toFixed(0);
+      spinner.fail('Deployment package too large');
+      process.stderr.write(chalk.red(`\nPackage exceeds ${sizeMB}MB limit. Add files to .scalixignore.\n`));
+      process.exit(1);
+    }
+
     await fs.unlink(zipPath);
 
     // Load environment variables
@@ -131,7 +127,7 @@ export async function updateCommand(deploymentId: string, options: UpdateOptions
 
         if (!key) {
           spinner.fail('Invalid environment variable format');
-          process.stderr.write(chalk.red('\nEnvironment variables must be in the format KEY=VALUE\n'));
+          process.stderr.write(chalk.red('\nFormat: KEY=VALUE\n'));
           process.exit(1);
         }
 
@@ -159,22 +155,40 @@ export async function updateCommand(deploymentId: string, options: UpdateOptions
 
     spinner.text = 'Updating deployment...';
 
-    // Update deployment
-    const response = await apiClient.put(`/api/hosting/deployments/${deploymentId}`, {
+    const gitMeta = getGitMeta(deployDir);
+    const updateData: Record<string, unknown> = {
       sourceCode,
       sourceType: 'upload',
-      environmentVariables: envVars
-    }, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
+      environmentVariables: envVars,
+    };
+
+    if (gitMeta) {
+      updateData.gitMeta = {
+        branch: gitMeta.branch,
+        commit: gitMeta.commit,
+        commitMessage: gitMeta.commitMessage,
+        dirty: gitMeta.dirty,
+      };
+    }
+
+    const response = await apiClient.put(
+      `/api/hosting/deployments/${deploymentId}`,
+      updateData,
+      { headers: { 'Authorization': `Bearer ${token}` } }
+    );
 
     if (response.data.success) {
-      spinner.succeed('Deployment updated successfully!');
-      process.stdout.write(chalk.green(`\n✓ Deployment ${deploymentId} has been updated\n`));
-      if (response.data.deployment?.url) {
-        process.stdout.write(chalk.blue(`✓ URL: ${response.data.deployment.url}\n`));
+      if (isJson) {
+        process.stdout.write(JSON.stringify({
+          updated: true,
+          id: deploymentId,
+          url: response.data.deployment?.url,
+        }, null, 2) + '\n');
+      } else {
+        spinner.succeed(`Deployment ${chalk.gray(deploymentId)} updated`);
+        if (response.data.deployment?.url) {
+          process.stdout.write(chalk.blue(`  URL: ${response.data.deployment.url}\n`));
+        }
       }
     } else {
       spinner.fail('Update failed');
@@ -184,13 +198,12 @@ export async function updateCommand(deploymentId: string, options: UpdateOptions
   } catch (error) {
     spinner.fail('Update failed');
 
-    // Clean up ZIP file if it exists
     try {
       const zipPath = path.join(path.resolve(options.dir || '.'), '.scalix-update.zip');
       await fsSync.promises.access(zipPath);
       await fsSync.promises.unlink(zipPath);
     } catch {
-      // ZIP file doesn't exist, ignore
+      // ZIP cleanup
     }
 
     const err = error as any;

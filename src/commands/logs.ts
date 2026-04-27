@@ -1,8 +1,3 @@
-/**
- * Logs Command
- * Views deployment logs
- */
-
 import chalk from 'chalk';
 import ora from 'ora';
 import { getToken } from '../utils/token';
@@ -10,11 +5,14 @@ import { apiClient } from '../utils/api';
 import { validateDeploymentId } from '../utils/validation';
 import { LOGS_POLL_INTERVAL, LOGS_FOLLOW_TAIL } from '../utils/constants';
 
-export async function logsCommand(deploymentId: string, options: { follow?: boolean; tail?: string }) {
-  const spinner = ora('Fetching logs...').start();
+export async function logsCommand(
+  deploymentId: string,
+  options: { follow?: boolean; tail?: string; since?: string; json?: boolean }
+) {
+  const isJson = options.json;
+  const spinner = isJson ? ora({ isSilent: true }) : ora('Fetching logs...').start();
 
   try {
-    // Validate deployment ID format
     const validation = validateDeploymentId(deploymentId);
     if (!validation.valid) {
       spinner.fail('Invalid deployment ID');
@@ -25,16 +23,19 @@ export async function logsCommand(deploymentId: string, options: { follow?: bool
     const token = await getToken();
     if (!token) {
       spinner.fail('Not authenticated');
-      process.stderr.write(chalk.red('\nPlease run "scalix login" first\n'));
+      process.stderr.write(chalk.red('\nPlease run "scalix-hosting login" first\n'));
       process.exit(1);
     }
 
-    const response = await apiClient.get(`/api/hosting/logs`, {
-      params: {
-        deploymentId,
-        tail: options.tail || '100'
-      }
-    });
+    const params: Record<string, string> = {
+      deploymentId,
+      tail: options.tail || '100',
+    };
+    if (options.since) {
+      params.since = options.since;
+    }
+
+    const response = await apiClient.get('/api/hosting/logs', { params });
 
     if (response.data.logs) {
       spinner.succeed('Logs fetched');
@@ -42,29 +43,39 @@ export async function logsCommand(deploymentId: string, options: { follow?: bool
       const logs = response.data.logs;
       const lines = logs.slice(-parseInt(options.tail || '100'));
 
-      process.stdout.write('\n');
-      for (const line of lines) {
-        process.stdout.write(`${line}\n`);
+      if (isJson) {
+        process.stdout.write(JSON.stringify(lines, null, 2) + '\n');
+        if (!options.follow) return;
+      } else {
+        process.stdout.write('\n');
+        for (const line of lines) {
+          process.stdout.write(`${line}\n`);
+        }
       }
 
       if (options.follow) {
-        process.stdout.write(chalk.gray('\nFollowing logs... (Press Ctrl+C to stop)\n'));
+        if (!isJson) {
+          process.stdout.write(chalk.gray('\nFollowing logs... (Ctrl+C to stop)\n'));
+        }
 
-        // Implement log following with polling
         let lastLogIndex = lines.length;
         const pollInterval = setInterval(async () => {
           try {
-            const followResponse = await apiClient.get(`/api/hosting/logs`, {
+            const followResponse = await apiClient.get('/api/hosting/logs', {
               params: {
                 deploymentId,
-                tail: LOGS_FOLLOW_TAIL.toString() // Get more logs for following
+                tail: LOGS_FOLLOW_TAIL.toString(),
               }
             });
 
             if (followResponse.data.logs) {
               const newLogs = followResponse.data.logs.slice(lastLogIndex);
               for (const line of newLogs) {
-                process.stdout.write(`${line}\n`);
+                if (isJson) {
+                  process.stdout.write(JSON.stringify({ log: line }) + '\n');
+                } else {
+                  process.stdout.write(`${line}\n`);
+                }
               }
               lastLogIndex = followResponse.data.logs.length;
             }
@@ -75,10 +86,11 @@ export async function logsCommand(deploymentId: string, options: { follow?: bool
           }
         }, LOGS_POLL_INTERVAL);
 
-        // Handle Ctrl+C
         process.on('SIGINT', () => {
           clearInterval(pollInterval);
-          process.stdout.write(chalk.gray('\n\nStopped following logs\n'));
+          if (!isJson) {
+            process.stdout.write(chalk.gray('\n\nStopped following logs\n'));
+          }
           process.exit(0);
         });
       }
@@ -96,4 +108,3 @@ export async function logsCommand(deploymentId: string, options: { follow?: bool
     process.exit(1);
   }
 }
-
