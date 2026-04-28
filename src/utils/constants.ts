@@ -23,32 +23,6 @@ export const APP_NAME_PATTERN = /^[a-z0-9-]+$/;
 export const ENV_VAR_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 export const ENV_VAR_NAME_PATTERN_STRICT = /^[A-Z_][A-Z0-9_]*$/;
 
-// Default ignore patterns (used when no .scalixignore exists)
-export const DEFAULT_IGNORE_PATTERNS = [
-  'node_modules',
-  '.git',
-  '.svn',
-  '.hg',
-  '.DS_Store',
-  'Thumbs.db',
-  '.env.local',
-  '.env.*.local',
-  '*.log',
-  'npm-debug.log*',
-  'yarn-debug.log*',
-  'yarn-error.log*',
-  '.scalix-deploy.zip',
-  '.scalix-update.zip',
-  'dist',
-  'build',
-  '.next',
-  '.nuxt',
-  '.cache',
-  'coverage',
-  '.nyc_output',
-  '__pycache__',
-  '*.pyc',
-  '.venv',
-  'venv',
-];
+// CLI Version
+export const CLI_VERSION = '1.1.0';
 

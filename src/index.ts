@@ -26,9 +26,9 @@ function getVersion(): string {
     const path = require('path');
     const pkgPath = path.join(__dirname, '../package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    return pkg.version || '1.0.0';
+    return pkg.version || '1.1.0';
   } catch {
-    return '1.0.0';
+    return '1.1.0';
   }
 }
 
@@ -68,11 +68,10 @@ program
 
 program
   .command('deploy')
-  .description('Deploy an application to Scalix Hosting')
-  .option('-d, --dir <directory>', 'Directory to deploy', '.')
+  .description('Deploy a GitHub repository to Scalix Hosting')
+  .option('-d, --dir <directory>', 'Project directory (used to detect git remote)', '.')
   .option('-n, --name <name>', 'Application name')
-  .option('--prod', 'Deploy to production (default)')
-  .option('--preview', 'Create a preview deployment')
+  .option('-b, --branch <branch>', 'Git branch to deploy (default: current branch)')
   .option('--env <file>', 'Environment variables file (.env)')
   .option('--env-var <key=value>', 'Set an environment variable (repeatable)', (val: string, prev: string[]) => {
     prev.push(val);
@@ -87,7 +86,7 @@ program
   .command('list')
   .alias('ls')
   .description('List all deployments')
-  .option('--status <status>', 'Filter by status (ready, deploying, error)')
+  .option('--status <status>', 'Filter by status (ready, queued, error)')
   .action((opts, cmd) => {
     const globals = cmd.optsWithGlobals();
     return listCommand({ ...opts, json: globals.json });
@@ -135,18 +134,30 @@ program
   });
 
 program
-  .command('update')
-  .description('Update an existing deployment with new code')
+  .command('restart')
+  .description('Restart a deployment')
   .argument('<deployment-id>', 'Deployment ID')
-  .option('-d, --dir <directory>', 'Directory to deploy', '.')
-  .option('--env <file>', 'Environment variables file (.env)')
-  .option('--env-var <key=value>', 'Set an environment variable (repeatable)', (val: string, prev: string[]) => {
-    prev.push(val);
-    return prev;
-  }, [] as string[])
-  .action((id, opts, cmd) => {
+  .action((id, _, cmd) => {
     const globals = cmd.optsWithGlobals();
-    return updateCommand(id, { ...opts, json: globals.json });
+    return updateCommand(id, { action: 'restart', json: globals.json });
+  });
+
+program
+  .command('stop')
+  .description('Stop a deployment (scale to zero)')
+  .argument('<deployment-id>', 'Deployment ID')
+  .action((id, _, cmd) => {
+    const globals = cmd.optsWithGlobals();
+    return updateCommand(id, { action: 'stop', json: globals.json });
+  });
+
+program
+  .command('start')
+  .description('Start a stopped deployment')
+  .argument('<deployment-id>', 'Deployment ID')
+  .action((id, _, cmd) => {
+    const globals = cmd.optsWithGlobals();
+    return updateCommand(id, { action: 'start', json: globals.json });
   });
 
 program

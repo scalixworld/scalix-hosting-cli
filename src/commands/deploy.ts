@@ -1,16 +1,12 @@
 import fs from 'fs/promises';
-import fsSync from 'fs';
 import path from 'path';
-import archiver from 'archiver';
 import chalk from 'chalk';
 import ora from 'ora';
 import { getToken } from '../utils/token';
 import { apiClient } from '../utils/api';
 import { loadEnvFile } from '../utils/env';
 import { getGitMeta } from '../utils/git';
-import { loadIgnorePatterns, shouldIgnore } from '../utils/ignore';
 import {
-  MAX_DEPLOYMENT_SIZE_BYTES,
   DEPLOYMENT_POLL_INTERVAL,
   DEPLOYMENT_MAX_ATTEMPTS
 } from '../utils/constants';
@@ -21,57 +17,9 @@ interface DeployOptions {
   name?: string;
   env?: string;
   envVar?: string[];
-  prod?: boolean;
-  preview?: boolean;
+  branch?: string;
   json?: boolean;
   yes?: boolean;
-}
-
-function output(data: Record<string, unknown>, options: DeployOptions): void {
-  if (options.json) {
-    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
-  }
-}
-
-async function getDirectorySize(dir: string, patterns: string[]): Promise<number> {
-  let total = 0;
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-
-  for (const entry of entries) {
-    if (shouldIgnore(entry.name, patterns)) continue;
-
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      total += await getDirectorySize(fullPath, patterns);
-    } else if (entry.isFile()) {
-      const stat = await fs.stat(fullPath);
-      total += stat.size;
-    }
-  }
-
-  return total;
-}
-
-async function addDirectoryToArchive(
-  archive: archiver.Archiver,
-  dir: string,
-  prefix: string,
-  patterns: string[]
-): Promise<void> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-
-  for (const entry of entries) {
-    if (shouldIgnore(entry.name, patterns)) continue;
-
-    const fullPath = path.join(dir, entry.name);
-    const archivePath = prefix ? `${prefix}/${entry.name}` : entry.name;
-
-    if (entry.isDirectory()) {
-      await addDirectoryToArchive(archive, fullPath, archivePath, patterns);
-    } else if (entry.isFile()) {
-      archive.file(fullPath, { name: archivePath });
-    }
-  }
 }
 
 async function pollDeploymentStatus(deploymentId: string, spinner: any, options: DeployOptions) {
@@ -87,15 +35,15 @@ async function pollDeploymentStatus(deploymentId: string, spinner: any, options:
       if (deployment.status === 'ready') {
         spinner.succeed('Deployment completed successfully!');
         if (options.json) {
-          output({ status: 'ready', url: deployment.cloudRunUrl, id: deploymentId }, options);
+          process.stdout.write(JSON.stringify({ status: 'ready', url: deployment.cloudRunUrl, id: deploymentId }, null, 2) + '\n');
         } else if (deployment.cloudRunUrl) {
-          process.stdout.write(chalk.green(`\n  Production: ${chalk.bold(deployment.cloudRunUrl)}\n\n`));
+          process.stdout.write(chalk.green(`\n  Live at: ${chalk.bold(deployment.cloudRunUrl)}\n\n`));
         }
         return;
       } else if (deployment.status === 'error') {
         spinner.fail('Deployment failed');
         if (options.json) {
-          output({ status: 'error', error: deployment.errorMessage, id: deploymentId }, options);
+          process.stdout.write(JSON.stringify({ status: 'error', error: deployment.errorMessage, id: deploymentId }, null, 2) + '\n');
         } else if (deployment.errorMessage) {
           process.stderr.write(chalk.red(`\nError: ${deployment.errorMessage}\n`));
         }
@@ -115,6 +63,20 @@ async function pollDeploymentStatus(deploymentId: string, spinner: any, options:
   process.stdout.write(chalk.yellow('\nUse "scalix-hosting status <id>" to check status\n'));
 }
 
+function detectGitRepository(dir: string): { repo: string; branch: string } | null {
+  const gitMeta = getGitMeta(dir);
+  if (!gitMeta?.remoteUrl) return null;
+
+  let repo = gitMeta.remoteUrl;
+  // Normalize SSH to HTTPS
+  if (repo.startsWith('git@github.com:')) {
+    repo = repo.replace('git@github.com:', 'https://github.com/');
+  }
+  repo = repo.replace(/\.git$/, '');
+
+  return { repo, branch: gitMeta.branch || 'main' };
+}
+
 export async function deployCommand(options: DeployOptions) {
   const isJson = options.json;
   const spinner = isJson ? ora({ isSilent: true }) : ora('Preparing deployment...').start();
@@ -124,7 +86,7 @@ export async function deployCommand(options: DeployOptions) {
     if (!token) {
       spinner.fail('Not authenticated');
       if (isJson) {
-        output({ error: 'not_authenticated' }, options);
+        process.stdout.write(JSON.stringify({ error: 'not_authenticated' }) + '\n');
       } else {
         process.stderr.write(chalk.red('\nPlease run "scalix-hosting login" first\n'));
       }
@@ -197,54 +159,35 @@ export async function deployCommand(options: DeployOptions) {
       }
     }
 
-    // Load ignore patterns
-    const ignorePatterns = await loadIgnorePatterns(deployDir);
-
-    // Check total size before creating archive
-    spinner.text = 'Calculating deployment size...';
-    const totalSize = await getDirectorySize(deployDir, ignorePatterns);
-    if (totalSize > MAX_DEPLOYMENT_SIZE_BYTES) {
-      const sizeMB = (MAX_DEPLOYMENT_SIZE_BYTES / 1024 / 1024).toFixed(0);
-      spinner.fail('Deployment package too large');
-      process.stderr.write(chalk.red(`\nTotal size (${(totalSize / 1024 / 1024).toFixed(1)}MB) exceeds ${sizeMB}MB limit.\n`));
-      process.stderr.write(chalk.gray('Add large files to .scalixignore to reduce size.\n'));
+    // Detect git repository from working directory
+    const detected = detectGitRepository(deployDir);
+    if (!detected) {
+      spinner.fail('Not a git repository');
+      process.stderr.write(chalk.red('\nScalix Hosting deploys from GitHub repositories.\n'));
+      process.stderr.write(chalk.gray('Initialize a git repo, add a GitHub remote, and push your code first:\n\n'));
+      process.stderr.write(chalk.gray('  git init && git remote add origin https://github.com/you/repo\n'));
+      process.stderr.write(chalk.gray('  git add . && git commit -m "init" && git push -u origin main\n\n'));
       process.exit(1);
     }
 
-    // Collect git metadata
+    const gitRepository = detected.repo;
+    const gitBranch = options.branch || detected.branch;
     const gitMeta = getGitMeta(deployDir);
 
-    if (!isJson && gitMeta) {
+    if (!isJson) {
       process.stdout.write('\n');
-      process.stdout.write(chalk.gray(`  Project   ${chalk.white(appName)}\n`));
-      process.stdout.write(chalk.gray(`  Branch    ${chalk.white(gitMeta.branch || 'detached')}\n`));
-      process.stdout.write(chalk.gray(`  Commit    ${chalk.white(gitMeta.commit || 'unknown')}${gitMeta.dirty ? chalk.yellow(' (dirty)') : ''}\n`));
-      process.stdout.write(chalk.gray(`  Size      ${chalk.white((totalSize / 1024 / 1024).toFixed(1) + 'MB')}\n`));
-      const target = options.prod ? 'production' : options.preview ? 'preview' : 'production';
-      process.stdout.write(chalk.gray(`  Target    ${chalk.white(target)}\n`));
+      process.stdout.write(chalk.gray(`  Project     ${chalk.white(appName)}\n`));
+      process.stdout.write(chalk.gray(`  Repository  ${chalk.white(gitRepository)}\n`));
+      process.stdout.write(chalk.gray(`  Branch      ${chalk.white(gitBranch)}\n`));
+      if (gitMeta?.commit) {
+        process.stdout.write(chalk.gray(`  Commit      ${chalk.white(gitMeta.commit)}${gitMeta.dirty ? chalk.yellow(' (uncommitted changes)') : ''}\n`));
+      }
       process.stdout.write('\n');
+
+      if (gitMeta?.dirty) {
+        process.stdout.write(chalk.yellow('  Warning: You have uncommitted changes. Only pushed commits will be deployed.\n\n'));
+      }
     }
-
-    spinner.text = 'Creating deployment package...';
-
-    // Create ZIP
-    const zipPath = path.join(deployDir, '.scalix-deploy.zip');
-    const zipOutput = fsSync.createWriteStream(zipPath);
-    const archive = archiver('zip', { zlib: { level: 9 } });
-    archive.pipe(zipOutput);
-
-    await addDirectoryToArchive(archive, deployDir, '', ignorePatterns);
-    await archive.finalize();
-
-    await new Promise<void>((resolve) => {
-      zipOutput.on('close', () => resolve());
-    });
-
-    spinner.text = 'Uploading...';
-
-    const zipBuffer = await fs.readFile(zipPath);
-    const sourceCode = zipBuffer.toString('base64');
-    await fs.unlink(zipPath);
 
     // Load environment variables
     const envVars: Record<string, string> = {};
@@ -269,20 +212,11 @@ export async function deployCommand(options: DeployOptions) {
 
     const deploymentData: Record<string, unknown> = {
       appName,
-      sourceCode,
-      sourceType: 'upload',
+      sourceType: 'git',
+      gitRepository,
+      gitBranch,
       environmentVariables: envVars,
-      target: options.preview ? 'preview' : 'production',
     };
-
-    if (gitMeta) {
-      deploymentData.gitMeta = {
-        branch: gitMeta.branch,
-        commit: gitMeta.commit,
-        commitMessage: gitMeta.commitMessage,
-        dirty: gitMeta.dirty,
-      };
-    }
 
     const response = await apiClient.post('/api/hosting/deploy', deploymentData, {
       headers: { 'Authorization': `Bearer ${token}` }
@@ -292,16 +226,16 @@ export async function deployCommand(options: DeployOptions) {
       const deploymentId = response.data.deployment.deploymentId;
 
       if (isJson) {
-        output({
+        process.stdout.write(JSON.stringify({
           id: deploymentId,
           url: response.data.deployment.url,
-          status: response.data.deployment.status || 'deploying',
-          target: options.preview ? 'preview' : 'production',
-          git: gitMeta ? { branch: gitMeta.branch, commit: gitMeta.commit } : null,
-        }, options);
+          status: response.data.deployment.status || 'queued',
+          repository: gitRepository,
+          branch: gitBranch,
+        }, null, 2) + '\n');
         if (response.data.deployment.status === 'ready') return;
       } else {
-        spinner.succeed(`Deployment started ${chalk.gray(deploymentId)}`);
+        spinner.succeed(`Deployment queued ${chalk.gray(deploymentId)}`);
         if (response.data.deployment.url) {
           process.stdout.write(chalk.blue(`  URL: ${response.data.deployment.url}\n`));
         }
@@ -313,28 +247,37 @@ export async function deployCommand(options: DeployOptions) {
       }
     } else {
       spinner.fail('Deployment failed');
-      process.stderr.write(chalk.red(`\nError: ${response.data.error || 'Unknown error'}\n`));
+      const err = response.data.error;
+      if (typeof err === 'object' && err?.type === 'GITHUB_CONNECT_REQUIRED') {
+        process.stderr.write(chalk.red(`\n${err.message}\n`));
+        process.stderr.write(chalk.gray(`Connect GitHub at: https://scalix.world${err.connectUrl || '/dashboard/integrations'}\n`));
+      } else if (typeof err === 'object' && err?.type === 'HOSTING_LIMIT_REACHED') {
+        process.stderr.write(chalk.red(`\n${err.message}\n`));
+        process.stderr.write(chalk.gray(`Upgrade at: https://scalix.world${err.upgradeUrl || '/dashboard/billing/plans'}\n`));
+      } else {
+        process.stderr.write(chalk.red(`\nError: ${typeof err === 'string' ? err : JSON.stringify(err)}\n`));
+      }
       process.exit(1);
     }
   } catch (error: any) {
     spinner.fail('Deployment failed');
 
-    try {
-      const zipPath = path.join(path.resolve(options.dir || '.'), '.scalix-deploy.zip');
-      await fs.access(zipPath);
-      await fs.unlink(zipPath);
-    } catch {
-      // ZIP cleanup
-    }
-
     if (error.response?.status === 401) {
       process.stderr.write(chalk.red('\nAuthentication failed. Run "scalix-hosting login" to re-authenticate.\n'));
-    } else if (error.response?.status === 413) {
-      process.stderr.write(chalk.red('\nDeployment package too large. Add files to .scalixignore.\n'));
+    } else if (error.response?.status === 403) {
+      const err = error.response.data?.error;
+      if (typeof err === 'object' && err?.type === 'GITHUB_CONNECT_REQUIRED') {
+        process.stderr.write(chalk.red(`\n${err.message}\n`));
+      } else if (typeof err === 'object' && err?.type === 'HOSTING_LIMIT_REACHED') {
+        process.stderr.write(chalk.red(`\n${err.message}\n`));
+      } else {
+        process.stderr.write(chalk.red(`\nError: ${typeof err === 'string' ? err : JSON.stringify(err)}\n`));
+      }
     } else if (error.response?.status === 429) {
       process.stderr.write(chalk.red('\nRate limit exceeded. Please wait and try again.\n'));
     } else if (error.response?.data?.error) {
-      process.stderr.write(chalk.red(`\nError: ${error.response.data.error}\n`));
+      const err = error.response.data.error;
+      process.stderr.write(chalk.red(`\nError: ${typeof err === 'string' ? err : JSON.stringify(err)}\n`));
     } else if (error.message) {
       process.stderr.write(chalk.red(`\nError: ${error.message}\n`));
     } else {
