@@ -1,17 +1,24 @@
 # Scalix Hosting CLI
 
-Command-line interface for Scalix Hosting - Deploy and manage static site applications from the terminal.
+> **Status: In Development** — The CLI builds and most commands work, but the deploy command has failing tests and the npm package (`@scalix-world/cli`) is a 0.0.1 placeholder. Do not install from npm yet.
+
+Command-line interface for Scalix Hosting — deploy and manage applications from the terminal.
 
 ## Installation
 
+**From source (development):**
+
 ```bash
-npm install -g @scalix-world/cli
+cd sdks/hosting-cli
+npm install --ignore-scripts
+npm run build
+node dist/index.js --help
 ```
 
-Or using yarn:
+**From npm (not yet available):**
 
 ```bash
-yarn global add @scalix-world/cli
+# npm install -g @scalix-world/cli  # placeholder only — real version not published yet
 ```
 
 ## Authentication
@@ -258,10 +265,24 @@ All requests go to `https://api.scalix.world` (override with `SCALIX_API_URL` en
 - `SCALIX_API_URL`: Override the API base URL (default: `https://api.scalix.world`)
 - `SCALIX_TOKEN`: Can also be set as an environment variable instead of using `scalix login`
 
+## Current State
+
+**Build:** passes (TypeScript compiles cleanly)
+
+**Tests:** 129/136 pass — 7 failures:
+- 6 in deploy command (broken mock setup — `apiClient.post` not being called)
+- 1 in API utils (version string mismatch: test expects `1.0.0`, code is `1.1.0`)
+
+**What works:** All commands build and compile. Auth, list, status, logs, config, db subcommands, domain, env, and health commands have passing tests.
+
+**What doesn't:** The deploy command's test mocks are broken, and the Cloud API hosting endpoints may not all be live yet.
+
 ## Limitations
 
-- The `delete` command is not yet functional (the Cloud API endpoint does not exist yet).
+- The npm package (`@scalix-world/cli` v0.0.1) is a placeholder — do not install from npm.
+- The `delete` command depends on a Cloud API endpoint that may not exist yet.
 - Deployment size is limited to 100 MB.
+- Deploy command tests are failing (mock issues, not necessarily code issues).
 
 ## Support
 
