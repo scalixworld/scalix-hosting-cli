@@ -17,6 +17,7 @@ import { registerDbCommand } from './commands/db';
 import { registerDomainCommand } from './commands/domain';
 import { registerEnvCommand } from './commands/env';
 import { registerHealthCommand } from './commands/health';
+import { checkForUpdate } from './utils/update-checker';
 
 function getVersion(): string {
   try {
@@ -184,5 +185,7 @@ registerDbCommand(program);
 registerDomainCommand(program);
 registerEnvCommand(program);
 registerHealthCommand(program);
+
+checkForUpdate().catch(() => {});
 
 program.parse();
