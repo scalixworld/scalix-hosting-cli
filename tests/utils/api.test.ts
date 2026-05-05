@@ -90,7 +90,7 @@ describe('API Utilities', () => {
       const createCall = vi.mocked(axios.create).mock.calls[0]?.[0]
       expect(createCall?.headers).toMatchObject({
         'Content-Type': 'application/json',
-        'User-Agent': 'scalix-cli/1.0.0'
+        'User-Agent': 'scalix-cli/1.1.0'
       })
     })
   })
