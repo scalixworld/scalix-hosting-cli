@@ -24,5 +24,5 @@ export const ENV_VAR_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 export const ENV_VAR_NAME_PATTERN_STRICT = /^[A-Z_][A-Z0-9_]*$/;
 
 // CLI Version
-export const CLI_VERSION = '1.1.0';
+export const CLI_VERSION = '1.2.0';
 
